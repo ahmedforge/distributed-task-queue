@@ -1,6 +1,6 @@
 import uuid
 from enum import Enum
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, Dict, Any
 from sqlmodel import SQLModel, Field, Column, JSON
 
@@ -21,5 +21,5 @@ class Job(SQLModel, table=True):
     retry_count: int = Field(default=0)
     max_retries: int = Field(default=3)
     error_message: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
