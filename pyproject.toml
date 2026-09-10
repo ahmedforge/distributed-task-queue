@@ -1,4 +1,5 @@
 [tool.poetry]
+package-mode = false
 name = "distributed-task-queue"
 version = "0.1.0"
 description = "Fullstack Distributed Task Queue System with FastAPI and Redis Streams"
@@ -13,6 +14,7 @@ sqlmodel = "^0.0.19"
 asyncpg = "^0.29.0"
 alembic = "^1.13.0"
 pydantic-settings = "^2.3.0"
+saq = {extras = ["redis"], version = "^0.26.4"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
