@@ -13,3 +13,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     )
     async with async_session() as session:
         yield session
+from sqlmodel import SQLModel
+from app.models.job import Job
+
+async def init_db() -> None:
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)

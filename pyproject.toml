@@ -24,3 +24,7 @@ black = "^24.4.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = "."
+asyncio_mode = "auto"
