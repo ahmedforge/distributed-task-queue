@@ -1,8 +1,9 @@
 import pytest
 from httpx import AsyncClient
 from sqlmodel.ext.asyncio.session import AsyncSession
-
+from app.tasks import process_pdf_render
 from app.core.database import engine
+from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
 
 
@@ -55,3 +56,52 @@ async def test_dlq_and_requeue_workflow(client: AsyncClient):
     assert data["status"] == JobStatus.PENDING
     assert data["retry_count"] == 0
     assert data["error_message"] is None
+@pytest.mark.asyncio
+async def test_worker_process_pdf_success():
+    """Test that process_pdf_render successfully updates job status to COMPLETED."""
+    # 1. Create a pending job directly in the database
+    async with async_session_maker() as session:
+        job = Job(filename="valid_document.pdf", max_retries=3, status=JobStatus.PENDING)
+        session.add(job)
+        await session.commit()
+        await session.refresh(job)
+        job_id = job.id
+
+    # 2. Execute worker task logic directly
+    ctx = {}
+    payload = {"id": job_id, "filename": "valid_document.pdf"}
+    await process_pdf_render(ctx, payload=payload)
+
+    # 3. Verify job status updated to COMPLETED in database
+    async with async_session_maker() as session:
+        updated_job = await session.get(Job, job_id)
+        assert updated_job is not None
+        assert updated_job.status == JobStatus.COMPLETED
+        assert updated_job.error_message is None
+
+
+@pytest.mark.asyncio
+async def test_worker_process_pdf_failure_and_dlq():
+    """Test that process_pdf_render handles errors, increments retries, and transitions to FAILED."""
+    # 1. Create a job configured to fail with max_retries = 1
+    async with async_session_maker() as session:
+        job = Job(filename="corrupted.pdf", max_retries=1, status=JobStatus.PENDING)
+        session.add(job)
+        await session.commit()
+        await session.refresh(job)
+        job_id = job.id
+
+    # 2. Execute task logic and catch simulated exception
+    ctx = {}
+    payload = {"id": job_id, "filename": "corrupted.pdf"}
+    with pytest.raises(ValueError, match="Corrupted PDF file cannot be processed."):
+        await process_pdf_render(ctx, payload=payload)
+
+    # 3. Verify job updated to FAILED and recorded error message
+    async with async_session_maker() as session:
+        failed_job = await session.get(Job, job_id)
+        assert failed_job is not None
+        assert failed_job.status == JobStatus.FAILED
+        assert failed_job.retry_count == 1
+        assert failed_job.error_message is not None
+        assert "Corrupted PDF file" in failed_job.error_message
