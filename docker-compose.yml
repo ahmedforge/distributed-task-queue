@@ -1,32 +1,65 @@
+version: "3.8"
+
 services:
+  # 1. PostgreSQL Database
   postgres:
     image: postgres:16-alpine
-    container_name: queue_postgres
+    container_name: dtq_postgres
     environment:
-      POSTGRES_USER: queue_user
-      POSTGRES_PASSWORD: queue_password
-      POSTGRES_DB: queue_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: task_queue_db
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U queue_user -d queue_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d task_queue_db"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # 2. Redis Task Broker
   redis:
     image: redis:7-alpine
-    container_name: queue_redis
+    container_name: dtq_redis
     ports:
       - "6379:6379"
-    command: redis-server --save 60 1 --loglevel notice
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # 3. FastAPI Web Application
+  api:
+    build: .
+    container_name: dtq_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@postgres:5432/task_queue_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # 4. SAQ Background Worker Process
+  worker:
+    build: .
+    container_name: dtq_worker
+    command: saq app.worker.settings --verbose
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@postgres:5432/task_queue_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
-  pgdata:
+  postgres_data:

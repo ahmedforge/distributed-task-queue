@@ -105,3 +105,20 @@ async def test_worker_process_pdf_failure_and_dlq():
         assert failed_job.retry_count == 1
         assert failed_job.error_message is not None
         assert "Corrupted PDF file" in failed_job.error_message
+
+@pytest.mark.asyncio
+async def test_get_job_stats(client):
+    """Test retrieving job metrics and queue statistics."""
+    # 1. Create a job to ensure database has records
+    await client.post("/api/v1/jobs", json={"filename": "doc1.pdf", "max_retries": 3})
+    
+    # 2. Query stats endpoint
+    response = await client.get("/api/v1/jobs/stats")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "total_jobs" in data
+    assert "status_counts" in data
+    assert "dlq_count" in data
+    assert data["queue_name"] == "tasks"
+    assert data["total_jobs"] >= 1

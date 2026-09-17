@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import select
+from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
-
+from sqlmodel import col, func, select
 from app.core.database import get_session
 from app.core.queue import queue
 from app.models.job import Job, JobCreate, JobRead, JobStatus
+from app.schemas.job import JobStatsResponse
 
 router = APIRouter()
 
@@ -30,6 +31,31 @@ async def create_job(job_in: JobCreate, session: AsyncSession = Depends(get_sess
         payload={"id": job.id, "filename": job.filename}
     )
     return job
+
+
+@router.get("/stats", response_model=JobStatsResponse)
+async def get_job_stats(session: AsyncSession = Depends(get_session)):
+    """Fetch aggregated job metrics across database and Redis queue."""
+    # 1. Aggregate database counts by status
+    statement = select(Job.status, func.count(col(Job.id))).group_by(Job.status)
+    results = await session.exec(statement)
+    raw_counts = dict(results.all())
+
+    # Map counts across all defined statuses
+    status_counts = {
+        status.value: raw_counts.get(status, 0)
+        for status in JobStatus
+    }
+
+    total_jobs = sum(status_counts.values())
+    dlq_count = status_counts.get(JobStatus.FAILED.value, 0)
+
+    return JobStatsResponse(
+        total_jobs=total_jobs,
+        status_counts=status_counts,
+        dlq_count=dlq_count,
+        queue_name=queue.name,
+    )
 
 
 @router.get("/dlq", response_model=List[JobRead])
