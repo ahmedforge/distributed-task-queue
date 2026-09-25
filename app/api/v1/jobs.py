@@ -8,6 +8,10 @@ from app.core.database import get_session
 from app.core.queue import queue
 from app.models.job import Job, JobCreate, JobRead, JobStatus
 from app.schemas.job import JobStatsResponse
+import redis.asyncio as aioredis
+from fastapi import WebSocket, WebSocketDisconnect
+from app.core.config import settings
+
 
 router = APIRouter()
 
@@ -99,3 +103,55 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
         payload={"id": job.id, "filename": job.filename}
     )
     return job
+@router.websocket("/jobs/{job_id}/ws")
+async def job_progress_websocket(websocket: WebSocket, job_id: int, session: AsyncSession = Depends(get_session)):
+    await websocket.accept()
+    
+    # 1. Fetch current job state from DB
+    job = await session.get(Job, job_id)
+
+    if not job:
+        await websocket.send_json({"error": f"Job {job_id} not found"})
+        await websocket.close(code=4004)
+        return
+
+    # 2. Handle Late Subscribers (Job already finished)
+    initial_payload = JobProgressUpdate(
+        job_id=job.id,
+        status=job.status,
+        progress=job.progress,
+        updated_at=job.updated_at
+    ).model_dump_json()
+    
+    await websocket.send_text(initial_payload)
+
+    if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+        await websocket.close(code=1000)
+        return
+
+    # 3. Subscribe to Redis Pub/Sub for active updates
+    redis_client = aioredis.from_url(settings.REDIS_URL)
+    pubsub = redis_client.pubsub()
+    channel_name = f"job_progress:{job_id}"
+    await pubsub.subscribe(channel_name)
+
+    try:
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                data_str = message["data"].decode("utf-8")
+                await websocket.send_text(data_str)
+                
+                update = JobProgressUpdate.model_validate_json(data_str)
+                if update.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+                    break
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await pubsub.unsubscribe(channel_name)
+        await pubsub.aclose()
+        await redis_client.aclose()
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass
