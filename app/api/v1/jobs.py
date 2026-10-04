@@ -103,11 +103,16 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
         payload={"id": job.id, "filename": job.filename}
     )
     return job
-@router.websocket("/jobs/{job_id}/ws")
-async def job_progress_websocket(websocket: WebSocket, job_id: int, session: AsyncSession = Depends(get_session)):
+
+@router.websocket("/{job_id}/ws")
+async def job_progress_websocket(
+    websocket: WebSocket,
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+):
     await websocket.accept()
-    
-    # 1. Fetch current job state from DB
+
+    # 1. Fetch job state
     job = await session.get(Job, job_id)
 
     if not job:
@@ -115,21 +120,22 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int, session: Asy
         await websocket.close(code=4004)
         return
 
-    # 2. Handle Late Subscribers (Job already finished)
+    # 2. Initial state payload
     initial_payload = JobProgressUpdate(
         job_id=job.id,
         status=job.status,
         progress=job.progress,
-        updated_at=job.updated_at
+        updated_at=job.updated_at,
     ).model_dump_json()
-    
+
     await websocket.send_text(initial_payload)
 
+    # Late subscriber check
     if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
         await websocket.close(code=1000)
         return
 
-    # 3. Subscribe to Redis Pub/Sub for active updates
+    # 3. Redis Pub/Sub subscription
     redis_client = aioredis.from_url(settings.REDIS_URL)
     pubsub = redis_client.pubsub()
     channel_name = f"job_progress:{job_id}"
@@ -140,7 +146,7 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int, session: Asy
             if message["type"] == "message":
                 data_str = message["data"].decode("utf-8")
                 await websocket.send_text(data_str)
-                
+
                 update = JobProgressUpdate.model_validate_json(data_str)
                 if update.status in (JobStatus.COMPLETED, JobStatus.FAILED):
                     break
