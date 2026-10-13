@@ -10,6 +10,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Match the individual variables consumed by app.core.config.Settings.
+    env:
+      POSTGRES_SERVER: 127.0.0.1
+      POSTGRES_PORT: '5433'
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: queue_password
+      POSTGRES_DB: task_queue
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -60,9 +70,6 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Initialize Database Schema
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:queue_password@localhost:5433/task_queue
-          REDIS_URL: redis://localhost:6379/0
         run: |
           poetry run python -c "
           import asyncio
@@ -78,7 +85,4 @@ jobs:
           "
 
       - name: Run Pytest Suite
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:queue_password@localhost:5433/task_queue
-          REDIS_URL: redis://localhost:6379/0
         run: poetry run pytest -v
