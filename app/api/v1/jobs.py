@@ -7,7 +7,7 @@ from sqlmodel import col, func, select
 from app.core.database import get_session
 from app.core.queue import queue
 from app.models.job import Job, JobCreate, JobRead, JobStatus
-from app.schemas.job import JobStatsResponse
+from app.schemas.job import JobProgressUpdate, JobStatsResponse
 import redis.asyncio as aioredis
 from fastapi import WebSocket, WebSocketDisconnect
 from app.core.config import settings

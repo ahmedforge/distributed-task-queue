@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 import redis.asyncio as aioredis
 from starlette.testclient import TestClient
@@ -7,7 +9,7 @@ from app.main import app
 from app.core.config import settings
 from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
-from app.schemas.job import JobProgressUpdate
+from app.worker import settings as worker_settings
 
 
 @pytest.mark.asyncio
@@ -21,6 +23,7 @@ async def test_websocket_nonexistent_job():
             data = websocket.receive_json()
             assert "error" in data
             assert data["error"] == "Job 99999 not found"
+            websocket.receive_json()  # Consume the close frame.
 
     assert exc_info.value.code == 4004
 
@@ -48,6 +51,7 @@ async def test_websocket_late_subscriber_completed_job():
             assert data["job_id"] == job_id
             assert data["status"] == "COMPLETED"
             assert data["progress"] == 100
+            websocket.receive_json()  # Consume the close frame.
 
     assert exc_info.value.code == 1000
 
@@ -76,53 +80,30 @@ async def test_websocket_live_progress_updates():
             assert initial_msg["status"] == "PROCESSING"
             assert initial_msg["progress"] == 10
 
-            # 3. Publish progress tick (50%) over Redis Pub/Sub
-            redis_client = aioredis.from_url(settings.REDIS_URL)
-            tick_payload = JobProgressUpdate(
-                job_id=job_id,
-                status=JobStatus.PROCESSING,
-                progress=50,
-                updated_at=job.updated_at
-            ).model_dump_json()
+            # Wait for the endpoint to subscribe before running the real worker.
+            async with aioredis.from_url(settings.REDIS_URL) as redis_client:
+                async with asyncio.timeout(5):
+                    while True:
+                        subscribers = await redis_client.pubsub_numsub(
+                            f"job_progress:{job_id}"
+                        )
+                        if subscribers[0][1] > 0:
+                            break
+                        await asyncio.sleep(0.01)
 
-            await redis_client.publish(f"job_progress:{job_id}", tick_payload)
+            await worker_settings["functions"][0](
+                {}, payload={"id": job_id, "filename": job.filename}
+            )
 
-            # Receive tick
-            tick_msg = websocket.receive_json()
-            assert tick_msg["progress"] == 50
-            assert tick_msg["status"] == "PROCESSING"
-
-            # 4. Publish terminal update (100% COMPLETED)
-            final_payload = JobProgressUpdate(
-                job_id=job_id,
-                status=JobStatus.COMPLETED,
-                progress=100,
-                updated_at=job.updated_at
-            ).model_dump_json()
-
-            await redis_client.publish(f"job_progress:{job_id}", final_payload)
-            await redis_client.aclose()
-
-            # Receive terminal message
-            final_msg = websocket.receive_json()
-            assert final_msg["progress"] == 100
-            assert final_msg["status"] == "COMPLETED"
+            # Verify worker checkpoints arrive through the WebSocket endpoint.
+            for progress in [10, 40, 75, 100]:
+                update = websocket.receive_json()
+                assert update["job_id"] == job_id
+                assert update["progress"] == progress
+                assert update["status"] == (
+                    "COMPLETED" if progress == 100 else "PROCESSING"
+                )
+            websocket.receive_json()  # Consume the terminal close frame.
 
     # Server loop breaks on COMPLETED and closes socket cleanly
     assert exc_info.value.code == 1000
-
-# tests/test_websocket.py
-
-@pytest.mark.asyncio
-async def test_websocket_nonexistent_job():
-    """Verify connecting to a non-existent job receives error and closes gracefully."""
-    client = TestClient(app)
-    
-    with pytest.raises(WebSocketDisconnect) as exc_info:
-        with client.websocket_connect("/api/v1/jobs/99999/ws") as websocket:
-            data = websocket.receive_json()
-            assert "error" in data
-            assert data["error"] == "Job 99999 not found"
-
-    # TestClient catches the close frame as code 1000 or 1006
-    assert exc_info.value.code in (1000, 4004)

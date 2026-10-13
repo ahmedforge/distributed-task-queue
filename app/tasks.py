@@ -3,10 +3,40 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+import redis.asyncio as aioredis
+
+from app.core.config import settings
 from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
+from app.schemas.job import JobProgressUpdate
 
 logger = logging.getLogger("saq")
+
+
+async def report_progress(session, job: Job, progress: int, status: JobStatus):
+    """Persist a checkpoint before notifying live subscribers."""
+    job.progress = progress
+    job.status = status
+    job.updated_at = datetime.now(timezone.utc)
+    session.add(job)
+    await session.commit()
+
+    update = JobProgressUpdate(
+        job_id=job.id,
+        status=job.status,
+        progress=job.progress,
+        updated_at=job.updated_at,
+    )
+    try:
+        async with aioredis.from_url(
+            settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2
+        ) as redis_client:
+            await redis_client.publish(
+                f"job_progress:{job.id}", update.model_dump_json()
+            )
+    except Exception:
+        # A notification outage must not change the persisted task outcome.
+        logger.warning("Could not publish progress for job %s", job.id, exc_info=True)
 
 
 async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
@@ -31,23 +61,22 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
             logger.warning(f"Job ID {job_id} not found in database.")
             return
 
-        job.status = JobStatus.PROCESSING
-        job.updated_at = datetime.now(timezone.utc)
-        session.add(job)
-        await session.commit()
+        await report_progress(session, job, 10, JobStatus.PROCESSING)
 
         try:
             # 2. Simulate execution (trigger failure for test file)
             if filename == "corrupted.pdf":
                 raise ValueError("Corrupted PDF file cannot be processed.")
 
-            await asyncio.sleep(2)
+            # Simulated checkpoints until a real PDF processor is added.
+            await asyncio.sleep(1)
+            await report_progress(session, job, 40, JobStatus.PROCESSING)
+            await asyncio.sleep(1)
+            await report_progress(session, job, 75, JobStatus.PROCESSING)
 
             # 3. Mark job as COMPLETED
-            job.status = JobStatus.COMPLETED
-            job.updated_at = datetime.now(timezone.utc)
-            session.add(job)
-            await session.commit()
+            job.error_message = None
+            await report_progress(session, job, 100, JobStatus.COMPLETED)
             logger.info(f"Successfully processed Job ID {job_id}")
 
         except Exception as exc:
@@ -57,8 +86,6 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
                 job.status = JobStatus.FAILED
 
             job.error_message = str(exc)
-            job.updated_at = datetime.now(timezone.utc)
-            session.add(job)
-            await session.commit()
+            await report_progress(session, job, job.progress, job.status)
             logger.error(f"Failed processing Job ID {job_id}: {exc}")
             raise exc
