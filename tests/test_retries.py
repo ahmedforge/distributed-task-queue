@@ -1,9 +1,10 @@
 import asyncio
+import time
 from uuid import uuid4
 
 import pytest
 from saq import Queue
-from saq.job import Status
+from saq.job import Job as QueueJob, Status
 from saq.worker import Worker
 
 from app.core.config import settings
@@ -17,6 +18,9 @@ from app.worker import settings as worker_settings
 async def test_real_queue_retry_exhaustion_and_manual_requeue(
     client, monkeypatch, attempt_limit
 ):
+    monkeypatch.setattr(settings, "RETRY_BASE_DELAY", 0.1)
+    monkeypatch.setattr(settings, "RETRY_MAX_DELAY", 0.2)
+    monkeypatch.setattr("saq.utils.random", lambda: 1.0)
     test_queue = Queue.from_url(settings.REDIS_URL, name=f"retry-test-{uuid4().hex}")
     monkeypatch.setattr("app.api.v1.jobs.queue", test_queue)
     worker = Worker(test_queue, functions=worker_settings["functions"], concurrency=1)
@@ -33,6 +37,12 @@ async def test_real_queue_retry_exhaustion_and_manual_requeue(
 
         async def exhaust_attempts():
             for attempt in range(1, attempt_limit + 1):
+                if attempt > 1:
+                    # The real worker's scheduler moves due delayed jobs to the ready queue.
+                    async with asyncio.timeout(5):
+                        while not await test_queue.schedule():
+                            await asyncio.sleep(0.05)
+                started = time.time()
                 async with asyncio.timeout(5):
                     assert await worker.process()
                 async with async_session_maker() as session:
@@ -43,6 +53,17 @@ async def test_real_queue_retry_exhaustion_and_manual_requeue(
                         if attempt == attempt_limit
                         else JobStatus.PENDING
                     )
+
+                if attempt < attempt_limit:
+                    queued = await test_queue.iter_jobs([Status.QUEUED]).__anext__()
+                    assert queued.retry_delay == settings.RETRY_BASE_DELAY
+                    assert queued.retry_backoff == settings.RETRY_MAX_DELAY
+                    assert queued.attempts == attempt
+                    scheduled = await test_queue.redis.zscore(
+                        test_queue._incomplete, queued.id
+                    )
+                    assert scheduled >= started + min(0.2, 0.1 * 2 ** (attempt - 1))
+                    assert await test_queue.redis.llen(test_queue._queued) == 0
 
         await exhaust_attempts()
         dlq = (await client.get("/api/v1/jobs/dlq")).json()
@@ -75,3 +96,20 @@ async def test_invalid_retry_limits_are_rejected(client, invalid_limit, pdf_byte
         data={"max_retries": invalid_limit},
     )
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(("attempt", "expected"), [(1, 2), (2, 4), (3, 8), (7, 60)])
+def test_backoff_growth_and_cap(monkeypatch, attempt, expected):
+    monkeypatch.setattr("saq.utils.random", lambda: 1.0)
+    job = QueueJob(
+        function="process_pdf_render", attempts=attempt, retry_delay=2, retry_backoff=60
+    )
+    assert job.next_retry_delay() == expected
+
+
+def test_backoff_applies_jitter(monkeypatch):
+    monkeypatch.setattr("saq.utils.random", lambda: 0.5)
+    job = QueueJob(
+        function="process_pdf_render", attempts=2, retry_delay=2, retry_backoff=60
+    )
+    assert job.next_retry_delay() == 2

@@ -23,6 +23,7 @@ For running the API/worker outside Docker, install `poppler-utils`, install Pyth
 - Renders each page with a maximum dimension of 1600 pixels. Progress advances as pages finish; 100% means the ZIP is ready.
 - Rejects empty uploads, non-PDF headers, invalid extensions, and oversized uploads. Malformed PDFs fail during processing and use the normal retry/failed-job flow.
 - `max_retries` is the maximum **total attempts**, including the first attempt. A value of 3 permits an initial attempt and two retries. Manual requeue resets this budget and progress.
+- Automatic retries use exponential backoff with jitter: default windows are 2, 4, 8 seconds, doubling up to a 60-second cap. SAQ chooses a random delay within each window. Configure `RETRY_BASE_DELAY` and `RETRY_MAX_DELAY` in seconds; both must be positive. The worker scheduler dispatches due retries, so actual start times may be slightly later. Manual requeue starts a fresh immediate attempt.
 - Uses job IDs for storage paths; original upload names are display metadata. Rendering subprocesses have a 30-second timeout each.
 - A failed Redis progress notification is logged; it does not change the persisted task outcome. The polling UI can still retrieve the state.
 

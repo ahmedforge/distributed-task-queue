@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +11,9 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "dtq_db"
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
-    STORAGE_DIR: str = 'data/jobs'
+    RETRY_BASE_DELAY: float = Field(default=2.0, gt=0)
+    RETRY_MAX_DELAY: float = Field(default=60.0, gt=0)
+    STORAGE_DIR: str = "data/jobs"
     MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
     MAX_PDF_PAGES: int = 50
 

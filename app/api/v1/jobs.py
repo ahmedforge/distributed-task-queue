@@ -117,6 +117,8 @@ async def upload_job(
                 "process_pdf_render",
                 payload={"id": job.id},
                 retries=job.max_retries,
+                retry_delay=settings.RETRY_BASE_DELAY,
+                retry_backoff=settings.RETRY_MAX_DELAY,
                 timeout=1800,
             )
         except Exception:
@@ -211,6 +213,8 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
         "process_pdf_render",
         payload={"id": job.id, "filename": job.filename},
         retries=job.max_retries,
+        retry_delay=settings.RETRY_BASE_DELAY,
+        retry_backoff=settings.RETRY_MAX_DELAY,
         timeout=1800,
     )
     return job
