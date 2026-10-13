@@ -32,7 +32,8 @@ async def create_job(job_in: JobCreate, session: AsyncSession = Depends(get_sess
 
     await queue.enqueue(
         "process_pdf_render",
-        payload={"id": job.id, "filename": job.filename}
+        payload={"id": job.id, "filename": job.filename},
+        retries=job.max_retries,
     )
     return job
 
@@ -91,6 +92,7 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
 
     job.status = JobStatus.PENDING
     job.retry_count = 0
+    job.progress = 0
     job.error_message = None
     job.updated_at = datetime.now(timezone.utc)
 
@@ -100,7 +102,8 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
 
     await queue.enqueue(
         "process_pdf_render",
-        payload={"id": job.id, "filename": job.filename}
+        payload={"id": job.id, "filename": job.filename},
+        retries=job.max_retries,
     )
     return job
 

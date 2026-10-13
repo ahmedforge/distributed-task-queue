@@ -82,8 +82,11 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
         except Exception as exc:
             # 4. Handle failure and update database state
             job.retry_count += 1
-            if job.retry_count >= job.max_retries:
-                job.status = JobStatus.FAILED
+            job.status = (
+                JobStatus.FAILED
+                if job.retry_count >= job.max_retries
+                else JobStatus.PENDING
+            )
 
             job.error_message = str(exc)
             await report_progress(session, job, job.progress, job.status)
