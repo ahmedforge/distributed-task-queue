@@ -6,9 +6,9 @@ export const Layout: React.FC = () => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Job Stats & Overview', icon: List },
+    { path: '/', label: 'Job Dashboard', icon: List },
     { path: '/submit', label: 'Submit PDF Job', icon: PlusCircle },
-    { path: '/dlq', label: 'Dead Letter Queue', icon: AlertTriangle },
+    { path: '/dlq', label: 'Failed Jobs', icon: AlertTriangle },
   ];
 
   return (

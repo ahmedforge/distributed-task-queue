@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The job page polls status every second and offers a ZIP download when processing completes. API documentation is available at http://localhost:8000/docs.
+Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The job page polls status every second and offers a ZIP download when processing completes. API documentation is available at http://localhost:8000/docs.
 
 The Docker image installs Poppler (`pdfinfo` and `pdftoppm`). API and worker containers share the `job_files` volume, so uploads and results survive container restarts. API processes run as a non-root user.
 
@@ -29,6 +29,7 @@ For running the API/worker outside Docker, install `poppler-utils`, install Pyth
 ## API
 
 - `POST /api/v1/jobs/upload`: multipart fields `file`, optional `max_retries` and `idempotency_key`.
+- `GET /api/v1/jobs?page=1&page_size=20&status=FAILED`: paginated list; status is optional and page size is capped at 100.
 - `GET /api/v1/jobs/{id}`: job state and progress.
 - `GET /api/v1/jobs/{id}/result`: ZIP download for a completed job.
 - `GET /api/v1/jobs/{id}/ws`: WebSocket progress events.
@@ -42,4 +43,4 @@ Filename-only JSON submissions are no longer supported. Jobs created before file
 
 Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including upload-to-download, retry exhaustion, idempotent submission, and WebSocket delivery. Test fixtures create and drop tables: use a disposable test database. GitHub Actions provides isolated services and installs Poppler.
 
-Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery, job listing/filtering, and frontend WebSocket reconnection. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. No Kubernetes deployment or throughput benchmark is implemented yet.
+Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery, frontend WebSocket reconnection. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. No Kubernetes deployment or throughput benchmark is implemented yet.

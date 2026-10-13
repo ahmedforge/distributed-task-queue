@@ -15,6 +15,7 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<JobListPage />} />
+            <Route path="dlq" element={<JobListPage failedOnly />} />
             <Route path="submit" element={<SubmitJobPage />} />
             <Route path="jobs/:id" element={<JobDetailPage />} />
           </Route>

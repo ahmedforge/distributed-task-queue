@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Dict
 from pydantic import BaseModel
-from app.models.job import JobStatus
+from app.models.job import JobRead, JobStatus
 
 
 class JobProgressUpdate(BaseModel):
@@ -16,3 +16,10 @@ class JobStatsResponse(BaseModel):
     total_jobs: int
     status_counts: Dict[str, int]
     dlq_count: int
+
+
+class JobListResponse(BaseModel):
+    items: list[JobRead]
+    total: int
+    page: int
+    page_size: int

@@ -3,14 +3,23 @@ from typing import List
 from pathlib import Path
 import tempfile
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    UploadFile,
+    File,
+    Form,
+    Query,
+)
 from fastapi.responses import FileResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
 from app.core.database import get_session
 from app.core.queue import queue
 from app.models.job import Job, JobRead, JobStatus
-from app.schemas.job import JobProgressUpdate, JobStatsResponse
+from app.schemas.job import JobProgressUpdate, JobStatsResponse, JobListResponse
 import redis.asyncio as aioredis
 from fastapi import WebSocket, WebSocketDisconnect
 from app.core.config import settings
@@ -18,6 +27,29 @@ from app.core.storage import input_path, result_path, job_directory
 
 
 router = APIRouter()
+
+
+@router.get("", response_model=JobListResponse)
+@router.get("/", response_model=JobListResponse, include_in_schema=False)
+async def list_jobs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    job_status: JobStatus | None = Query(None, alias="status"),
+    session: AsyncSession = Depends(get_session),
+):
+    statement = select(Job)
+    count_statement = select(func.count(col(Job.id)))
+    if job_status is not None:
+        statement = statement.where(Job.status == job_status)
+        count_statement = count_statement.where(Job.status == job_status)
+    total = (await session.exec(count_statement)).one()
+    statement = (
+        statement.order_by(col(Job.created_at).desc(), col(Job.id).desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    jobs = (await session.exec(statement)).all()
+    return JobListResponse(items=jobs, total=total, page=page, page_size=page_size)
 
 
 @router.post("", deprecated=True)

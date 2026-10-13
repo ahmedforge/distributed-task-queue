@@ -13,10 +13,11 @@ export interface JobRead {
   updated_at: string;
 }
 
-export interface JobCreate {
-  filename: string;
-  max_retries?: number;
-  idempotency_key?: string | null;
+export interface JobListResponse {
+  items: JobRead[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface JobStatsResponse {
@@ -36,6 +37,13 @@ export interface JobProgressUpdate {
 const API_BASE = '/api/v1/jobs';
 
 export const apiClient = {
+  listJobs: async (page: number, status?: JobStatus): Promise<JobListResponse> => {
+    const params = new URLSearchParams({ page: String(page), page_size: '20' });
+    if (status) params.set('status', status);
+    const res = await fetch(`${API_BASE}?${params}`);
+    if (!res.ok) throw new Error('Failed to fetch jobs');
+    return res.json();
+  },
   uploadJob: async (file: File, idempotencyKey?: string): Promise<JobRead> => {
     const form = new FormData();
     form.append('file', file);
