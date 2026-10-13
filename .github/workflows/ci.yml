@@ -66,6 +66,9 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
+      - name: Install PDF Renderer
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Install Dependencies
         run: poetry install --no-interaction
 

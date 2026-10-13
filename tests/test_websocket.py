@@ -16,7 +16,7 @@ from app.worker import settings as worker_settings
 async def test_websocket_nonexistent_job():
     """Verify connecting to a non-existent job receives error and closes gracefully."""
     client = TestClient(app)
-    
+
     # Catch WebSocketDisconnect raised when server closes with code 4004
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect("/api/v1/jobs/99999/ws") as websocket:
@@ -34,9 +34,7 @@ async def test_websocket_late_subscriber_completed_job():
     # 1. Seed completed job
     async with async_session_maker() as session:
         job = Job(
-            filename="completed_doc.pdf",
-            status=JobStatus.COMPLETED,
-            progress=100
+            filename="completed_doc.pdf", status=JobStatus.COMPLETED, progress=100
         )
         session.add(job)
         await session.commit()
@@ -57,23 +55,21 @@ async def test_websocket_late_subscriber_completed_job():
 
 
 @pytest.mark.asyncio
-async def test_websocket_live_progress_updates():
+async def test_websocket_live_progress_updates(store_pdf):
     """Verify real-time progress updates published over Redis Pub/Sub reach WebSocket clients."""
     # 1. Seed processing job
     async with async_session_maker() as session:
-        job = Job(
-            filename="active_doc.pdf",
-            status=JobStatus.PROCESSING,
-            progress=10
-        )
+        job = Job(filename="active_doc.pdf", status=JobStatus.PROCESSING, progress=10)
         session.add(job)
         await session.commit()
         await session.refresh(job)
         job_id = job.id
 
+    store_pdf(job_id)
+
     # 2. Connect via WebSocket and read initial state
     client = TestClient(app)
-    
+
     with pytest.raises(WebSocketDisconnect) as exc_info:
         with client.websocket_connect(f"/api/v1/jobs/{job_id}/ws") as websocket:
             initial_msg = websocket.receive_json()
@@ -96,7 +92,7 @@ async def test_websocket_live_progress_updates():
             )
 
             # Verify worker checkpoints arrive through the WebSocket endpoint.
-            for progress in [10, 40, 75, 100]:
+            for progress in [0, 10, 90, 100]:
                 update = websocket.receive_json()
                 assert update["job_id"] == job_id
                 assert update["progress"] == progress

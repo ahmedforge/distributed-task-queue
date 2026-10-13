@@ -6,13 +6,13 @@ from app.models.job import Job, JobStatus
 
 
 @pytest.mark.asyncio
-async def test_create_job_and_verify_idempotency(client: AsyncClient):
-    payload = {
-        "filename": "test_document.pdf",
-        "max_retries": 3
-    }
+async def test_create_job_and_verify_idempotency(client: AsyncClient, pdf_bytes):
+    payload = {"filename": "test_document.pdf", "max_retries": 3}
 
-    response = await client.post("/api/v1/jobs", json=payload)
+    response = await client.post(
+        "/api/v1/jobs/upload",
+        files={"file": (payload["filename"], pdf_bytes, "application/pdf")},
+    )
     assert response.status_code == 201
     data = response.json()
     assert data["filename"] == "test_document.pdf"
@@ -35,7 +35,7 @@ async def test_dlq_and_requeue_workflow(client: AsyncClient):
             status=JobStatus.FAILED,
             retry_count=3,
             max_retries=3,
-            error_message="Render engine crash"
+            error_message="Render engine crash",
         )
         session.add(failed_job)
         await session.commit()
@@ -58,15 +58,18 @@ async def test_dlq_and_requeue_workflow(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_worker_process_pdf_success():
+async def test_worker_process_pdf_success(store_pdf):
     """Test that process_pdf_render successfully updates job status to COMPLETED."""
     async with async_session_maker() as session:
-        job = Job(filename="valid_document.pdf", max_retries=3, status=JobStatus.PENDING)
+        job = Job(
+            filename="valid_document.pdf", max_retries=3, status=JobStatus.PENDING
+        )
         session.add(job)
         await session.commit()
         await session.refresh(job)
         job_id = job.id
 
+    store_pdf(job_id, corrupted=job.filename == "corrupted.pdf")
     ctx = {}
     payload = {"id": job_id, "filename": "valid_document.pdf"}
     await process_pdf_render(ctx, payload=payload)
@@ -79,7 +82,7 @@ async def test_worker_process_pdf_success():
 
 
 @pytest.mark.asyncio
-async def test_worker_process_pdf_failure_and_dlq():
+async def test_worker_process_pdf_failure_and_dlq(store_pdf):
     """Test that process_pdf_render handles errors, increments retries, and transitions to FAILED."""
     async with async_session_maker() as session:
         job = Job(filename="corrupted.pdf", max_retries=1, status=JobStatus.PENDING)
@@ -88,9 +91,10 @@ async def test_worker_process_pdf_failure_and_dlq():
         await session.refresh(job)
         job_id = job.id
 
+    store_pdf(job_id, corrupted=job.filename == "corrupted.pdf")
     ctx = {}
     payload = {"id": job_id, "filename": "corrupted.pdf"}
-    with pytest.raises(ValueError, match="Corrupted PDF file cannot be processed."):
+    with pytest.raises(ValueError, match="PDF processing failed"):
         await process_pdf_render(ctx, payload=payload)
 
     async with async_session_maker() as session:
@@ -99,17 +103,20 @@ async def test_worker_process_pdf_failure_and_dlq():
         assert failed_job.status == JobStatus.FAILED
         assert failed_job.retry_count == 1
         assert failed_job.error_message is not None
-        assert "Corrupted PDF file" in failed_job.error_message
+        assert "PDF processing failed" in failed_job.error_message
 
 
 @pytest.mark.asyncio
-async def test_get_job_stats(client: AsyncClient):
+async def test_get_job_stats(client: AsyncClient, pdf_bytes):
     """Test retrieving job metrics and queue statistics."""
-    await client.post("/api/v1/jobs", json={"filename": "doc1.pdf", "max_retries": 3})
-    
+    await client.post(
+        "/api/v1/jobs/upload",
+        files={"file": ("doc1.pdf", pdf_bytes, "application/pdf")},
+    )
+
     response = await client.get("/api/v1/jobs/stats")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert "total_jobs" in data
     assert "status_counts" in data

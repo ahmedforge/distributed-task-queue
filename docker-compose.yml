@@ -46,6 +46,9 @@ services:
       POSTGRES_DB: task_queue_db
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      STORAGE_DIR: /app/data/jobs
+    volumes:
+      - job_files:/app/data/jobs
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +70,12 @@ services:
       POSTGRES_DB: task_queue_db
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      STORAGE_DIR: /app/data/jobs
+    volumes:
+      - job_files:/app/data/jobs
     depends_on:
+      api:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
@@ -75,3 +83,4 @@ services:
 
 volumes:
   postgres_data:
+  job_files:

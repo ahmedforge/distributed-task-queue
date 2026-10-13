@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -9,6 +8,7 @@ from app.core.config import settings
 from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
 from app.schemas.job import JobProgressUpdate
+from app.pdf import render_pdf
 
 logger = logging.getLogger("saq")
 
@@ -48,7 +48,6 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
     # Extract payload regardless of how SAQ unpacked kwargs
     payload = kwargs.get("payload", kwargs)
     job_id = payload.get("id")
-    filename = payload.get("filename", "")
 
     if not job_id:
         logger.error(f"Received job payload missing 'id': {kwargs}")
@@ -61,18 +60,13 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
             logger.warning(f"Job ID {job_id} not found in database.")
             return
 
-        await report_progress(session, job, 10, JobStatus.PROCESSING)
+        await report_progress(session, job, 0, JobStatus.PROCESSING)
 
         try:
-            # 2. Simulate execution (trigger failure for test file)
-            if filename == "corrupted.pdf":
-                raise ValueError("Corrupted PDF file cannot be processed.")
+            async def on_progress(progress: int):
+                await report_progress(session, job, progress, JobStatus.PROCESSING)
 
-            # Simulated checkpoints until a real PDF processor is added.
-            await asyncio.sleep(1)
-            await report_progress(session, job, 40, JobStatus.PROCESSING)
-            await asyncio.sleep(1)
-            await report_progress(session, job, 75, JobStatus.PROCESSING)
+            await render_pdf(job_id, on_progress)
 
             # 3. Mark job as COMPLETED
             job.error_message = None

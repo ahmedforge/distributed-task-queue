@@ -36,13 +36,15 @@ export interface JobProgressUpdate {
 const API_BASE = '/api/v1/jobs';
 
 export const apiClient = {
-  createJob: async (data: JobCreate): Promise<JobRead> => {
-    const res = await fetch(`${API_BASE}/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create job');
+  uploadJob: async (file: File, idempotencyKey?: string): Promise<JobRead> => {
+    const form = new FormData();
+    form.append('file', file);
+    if (idempotencyKey) form.append('idempotency_key', idempotencyKey);
+    const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: form });
+    if (!res.ok) {
+      const error = await res.json().catch(() => null);
+      throw new Error(typeof error?.detail === 'string' ? error.detail : 'Failed to upload PDF');
+    }
     return res.json();
   },
 

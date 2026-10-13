@@ -1,41 +1,119 @@
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import func, select
+from pathlib import Path
+import tempfile
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
 from app.core.database import get_session
 from app.core.queue import queue
-from app.models.job import Job, JobCreate, JobRead, JobStatus
+from app.models.job import Job, JobRead, JobStatus
 from app.schemas.job import JobProgressUpdate, JobStatsResponse
 import redis.asyncio as aioredis
 from fastapi import WebSocket, WebSocketDisconnect
 from app.core.config import settings
+from app.core.storage import input_path, result_path, job_directory
 
 
 router = APIRouter()
 
 
-@router.post("", response_model=JobRead, status_code=status.HTTP_201_CREATED)
-@router.post("/", response_model=JobRead, status_code=status.HTTP_201_CREATED, include_in_schema=False)
-async def create_job(job_in: JobCreate, session: AsyncSession = Depends(get_session)):
-    if job_in.idempotency_key:
-        statement = select(Job).where(Job.idempotency_key == job_in.idempotency_key)
-        existing = (await session.exec(statement)).first()
+@router.post("", deprecated=True)
+@router.post("/", include_in_schema=False)
+async def create_job():
+    raise HTTPException(
+        400,
+        "Filename-only submissions are no longer supported. Upload a PDF to /api/v1/jobs/upload.",
+    )
+
+
+@router.post("/upload", response_model=JobRead, status_code=201)
+async def upload_job(
+    file: UploadFile = File(...),
+    max_retries: int = Form(3, ge=1),
+    idempotency_key: str | None = Form(None),
+    session: AsyncSession = Depends(get_session),
+):
+    filename = (file.filename or "").replace("\\", "/").split("/")[-1]
+    if not filename.lower().endswith(".pdf") or len(filename) > 255:
+        raise HTTPException(
+            400, "Choose a PDF file with a filename of at most 255 characters."
+        )
+    if idempotency_key:
+        existing = (
+            await session.exec(
+                select(Job).where(Job.idempotency_key == idempotency_key)
+            )
+        ).first()
         if existing:
             return existing
 
-    job = Job.model_validate(job_in)
-    session.add(job)
-    await session.commit()
-    await session.refresh(job)
+    root = Path(settings.STORAGE_DIR).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=root, delete=False) as output:
+            temporary = Path(output.name)
+            size = 0
+            first = True
+            while chunk := await file.read(1024 * 1024):
+                if first and not chunk.startswith(b"%PDF-"):
+                    raise HTTPException(
+                        400, "The uploaded file does not have a PDF header."
+                    )
+                first = False
+                size += len(chunk)
+                if size > settings.MAX_UPLOAD_BYTES:
+                    raise HTTPException(413, "PDF exceeds the upload size limit.")
+                await asyncio.to_thread(output.write, chunk)
+            if size == 0:
+                raise HTTPException(400, "The PDF file is empty.")
 
-    await queue.enqueue(
-        "process_pdf_render",
-        payload={"id": job.id, "filename": job.filename},
-        retries=job.max_retries,
+        job = Job(
+            filename=filename, max_retries=max_retries, idempotency_key=idempotency_key
+        )
+        session.add(job)
+        await session.flush()
+        job_directory(job.id).mkdir(parents=True, exist_ok=True)
+        temporary.replace(input_path(job.id))
+        await session.commit()
+        await session.refresh(job)
+        try:
+            await queue.enqueue(
+                "process_pdf_render",
+                payload={"id": job.id},
+                retries=job.max_retries,
+                timeout=1800,
+            )
+        except Exception:
+            job.status = JobStatus.FAILED
+            job.error_message = (
+                "Queue unavailable. Requeue this job when Redis is available."
+            )
+            await session.commit()
+            raise HTTPException(503, {"message": job.error_message, "job_id": job.id})
+        return job
+    finally:
+        if temporary:
+            temporary.unlink(missing_ok=True)
+        await file.close()
+
+
+@router.get("/{job_id}/result")
+async def download_result(job_id: int, session: AsyncSession = Depends(get_session)):
+    job = await session.get(Job, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status != JobStatus.COMPLETED:
+        raise HTTPException(409, "The job has not completed.")
+    result = result_path(job_id)
+    if not result.is_file():
+        raise HTTPException(404, "The rendered result is unavailable.")
+    return FileResponse(
+        result, media_type="application/zip", filename=f"job-{job_id}-pages.zip"
     )
-    return job
 
 
 @router.get("/stats", response_model=JobStatsResponse)
@@ -47,10 +125,7 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
     raw_counts = dict(results.all())
 
     # Map counts across all defined statuses
-    status_counts = {
-        status.value: raw_counts.get(status, 0)
-        for status in JobStatus
-    }
+    status_counts = {status.value: raw_counts.get(status, 0) for status in JobStatus}
 
     total_jobs = sum(status_counts.values())
     dlq_count = status_counts.get(JobStatus.FAILED.value, 0)
@@ -87,7 +162,7 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
     if job.status != JobStatus.FAILED:
         raise HTTPException(
             status_code=400,
-            detail=f"Only FAILED jobs can be requeued. Current status: {job.status}"
+            detail=f"Only FAILED jobs can be requeued. Current status: {job.status}",
         )
 
     job.status = JobStatus.PENDING
@@ -104,8 +179,10 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
         "process_pdf_render",
         payload={"id": job.id, "filename": job.filename},
         retries=job.max_retries,
+        timeout=1800,
     )
     return job
+
 
 @router.websocket("/{job_id}/ws")
 async def job_progress_websocket(

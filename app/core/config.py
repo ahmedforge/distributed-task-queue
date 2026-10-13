@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "dtq_db"
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    STORAGE_DIR: str = 'data/jobs'
+    MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
+    MAX_PDF_PAGES: int = 50
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

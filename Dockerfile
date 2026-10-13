@@ -2,6 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && \
+    rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
@@ -20,7 +23,7 @@ COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 
 # Set permissions and switch user
-RUN chown -R appuser:appgroup /app
+RUN mkdir -p /app/data/jobs && chown -R appuser:appgroup /app
 USER appuser
 
 EXPOSE 8000

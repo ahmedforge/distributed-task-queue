@@ -12,14 +12,14 @@ from app.worker import settings as worker_settings
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ('filename', 'expected_status', 'expected_progress'),
+    ("filename", "expected_status", "expected_progress"),
     [
-        ('valid.pdf', JobStatus.COMPLETED, [10, 40, 75, 100]),
-        ('corrupted.pdf', JobStatus.FAILED, [10, 10]),
+        ("valid.pdf", JobStatus.COMPLETED, [0, 10, 90, 100]),
+        ("corrupted.pdf", JobStatus.FAILED, [0, 0]),
     ],
 )
 async def test_registered_worker_publishes_persisted_progress(
-    filename, expected_status, expected_progress
+    filename, expected_status, expected_progress, store_pdf
 ):
     async with async_session_maker() as session:
         job = Job(filename=filename, max_retries=1)
@@ -28,22 +28,23 @@ async def test_registered_worker_publishes_persisted_progress(
         await session.refresh(job)
         job_id = job.id
 
+    store_pdf(job_id, corrupted=filename == "corrupted.pdf")
     async with aioredis.from_url(settings.REDIS_URL) as redis_client:
         async with redis_client.pubsub() as pubsub:
-            await pubsub.subscribe(f'job_progress:{job_id}')
+            await pubsub.subscribe(f"job_progress:{job_id}")
             # Await the subscription acknowledgement before starting the worker.
             async with asyncio.timeout(5):
                 while True:
                     message = await pubsub.get_message(timeout=1)
-                    if message and message['type'] == 'subscribe':
+                    if message and message["type"] == "subscribe":
                         break
 
-            task = worker_settings['functions'][0]
+            task = worker_settings["functions"][0]
             if expected_status == JobStatus.FAILED:
-                with pytest.raises(ValueError, match='Corrupted PDF'):
-                    await task({}, payload={'id': job_id, 'filename': filename})
+                with pytest.raises(ValueError, match="PDF processing failed"):
+                    await task({}, payload={"id": job_id, "filename": filename})
             else:
-                await task({}, payload={'id': job_id, 'filename': filename})
+                await task({}, payload={"id": job_id, "filename": filename})
 
             updates = []
             async with asyncio.timeout(5):
@@ -53,7 +54,7 @@ async def test_registered_worker_publishes_persisted_progress(
                     )
                     if message:
                         updates.append(
-                            JobProgressUpdate.model_validate_json(message['data'])
+                            JobProgressUpdate.model_validate_json(message["data"])
                         )
 
     assert [update.progress for update in updates] == expected_progress
@@ -68,20 +69,22 @@ async def test_registered_worker_publishes_persisted_progress(
 
 
 @pytest.mark.asyncio
-async def test_progress_notification_outage_does_not_fail_job(monkeypatch):
+async def test_progress_notification_outage_does_not_fail_job(monkeypatch, store_pdf):
     async with async_session_maker() as session:
-        job = Job(filename='valid.pdf')
+        job = Job(filename="valid.pdf")
         session.add(job)
         await session.commit()
         await session.refresh(job)
         job_id = job.id
 
-    def unavailable_redis(*args, **kwargs):
-        raise ConnectionError('Notification service unavailable')
+    store_pdf(job_id)
 
-    monkeypatch.setattr('app.tasks.aioredis.from_url', unavailable_redis)
-    await worker_settings['functions'][0](
-        {}, payload={'id': job_id, 'filename': 'valid.pdf'}
+    def unavailable_redis(*args, **kwargs):
+        raise ConnectionError("Notification service unavailable")
+
+    monkeypatch.setattr("app.tasks.aioredis.from_url", unavailable_redis)
+    await worker_settings["functions"][0](
+        {}, payload={"id": job_id, "filename": "valid.pdf"}
     )
 
     async with async_session_maker() as session:
