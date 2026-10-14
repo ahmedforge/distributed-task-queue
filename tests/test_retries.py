@@ -169,3 +169,44 @@ async def test_requeue_enqueue_failure_is_recoverable_without_overwriting_worker
         assert retried.status_code == 200
         assert retried.json()["status"] == "PENDING"
         assert retried.json()["retry_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requeues_enqueue_only_once(client, monkeypatch):
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    async with async_session_maker() as session:
+        job = Job(filename="failed.pdf", status=JobStatus.FAILED, retry_count=3)
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+
+    original_get = AsyncSession.get
+    both_read = asyncio.Event()
+    reads = 0
+    enqueues = []
+
+    async def synchronized_get(self, model, ident, **kwargs):
+        nonlocal reads
+        result = await original_get(self, model, ident, **kwargs)
+        if model is Job and ident == job_id:
+            reads += 1
+            if reads == 2:
+                both_read.set()
+            await asyncio.wait_for(both_read.wait(), timeout=5)
+        return result
+
+    async def enqueue(*args, **kwargs):
+        enqueues.append(kwargs["payload"]["id"])
+        return object()
+
+    # The old get/check/update path deterministically reads FAILED twice.
+    # The locked SELECT path serializes the claims instead.
+    monkeypatch.setattr(AsyncSession, "get", synchronized_get)
+    monkeypatch.setattr("app.api.v1.jobs.queue.enqueue", enqueue)
+    responses = await asyncio.gather(
+        client.post(f"/api/v1/jobs/{job_id}/requeue"),
+        client.post(f"/api/v1/jobs/{job_id}/requeue"),
+    )
+    assert sorted(r.status_code for r in responses) == [200, 400]
+    assert enqueues == [job_id]

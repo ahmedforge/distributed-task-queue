@@ -225,7 +225,10 @@ async def get_job(job_id: int, session: AsyncSession = Depends(get_session)):
 
 @router.post("/{job_id}/requeue", response_model=JobRead)
 async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_session)):
-    job = await session.get(Job, job_id)
+    # Serialize requeue claims until the FAILED -> PENDING change is committed.
+    job = (
+        await session.exec(select(Job).where(Job.id == job_id).with_for_update())
+    ).one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
