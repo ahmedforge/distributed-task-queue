@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import async_session_maker
 from app.core.queue import queue
 from app.models.job import Job, JobStatus
+from app.recovery import reconcile_stalled_jobs
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ async def dispatch_loop():
     while True:
         try:
             await dispatch_pending()
+            await reconcile_stalled_jobs()
         except Exception:
             logger.exception("Dispatch recovery pass failed")
         await asyncio.sleep(2)

@@ -47,6 +47,20 @@ async def record_attempt(outcome: str, duration: float, terminal_failure: bool) 
         logger.warning("Could not record worker metrics", exc_info=True)
 
 
+async def record_terminal_failure():
+    """Record a reconciled terminal failure without inventing attempt duration."""
+    try:
+        async with aioredis.from_url(
+            settings.REDIS_URL, socket_connect_timeout=0.5, socket_timeout=0.5
+        ) as redis:
+            await asyncio.wait_for(
+                redis.hincrby(metrics_key(), f"{TASK_TYPE}:terminal_failures", 1),
+                timeout=0.5,
+            )
+    except (RedisError, OSError, TimeoutError):
+        logger.warning("Could not record terminal failure", exc_info=True)
+
+
 class WorkerCollector:
     def __init__(self, snapshot):
         self.snapshot = snapshot

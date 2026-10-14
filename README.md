@@ -76,9 +76,17 @@ For running the API/worker outside Docker, install `poppler-utils`, install Pyth
 
 Each upload or manual requeue saves a unique delivery key and a pending-delivery marker in the same PostgreSQL transaction as the job state. The API tries immediate delivery to SAQ; its background dispatcher also checks committed markers every two seconds, including after API restart. Redis outages leave accepted jobs `PENDING` for automatic delivery rather than moving them into the failed-job list. Uploads return HTTP 201 and requeues return HTTP 200 once their intent is saved, even when Redis is temporarily unavailable.
 
-Delivery uses the same SAQ key until acknowledged. A worker receipt clears the marker before rendering; completed/failed jobs and tasks from older requeue generations are not rendered again. PostgreSQL row locks serialize delivery claims and manual requeues. This closes the API-crash gap between saving a job and enqueueing it; it does not provide exactly-once execution or recover work lost after an acknowledged delivery if Redis loses its data. Worker crashes/timeouts and storage cleanup remain separate work.
+Delivery uses the same SAQ key until acknowledged. A worker receipt clears the marker before rendering; completed/failed jobs and tasks from older requeue generations are not rendered again. PostgreSQL row locks serialize delivery claims and manual requeues. This closes the API-crash gap between saving a job and enqueueing it; it does not provide exactly-once execution or recover work lost after an acknowledged delivery if Redis loses its data. Worker interruption handling is described below; storage cleanup remains separate work.
 
 The API must remain running for automatic dispatch retries. The migration preserves existing jobs without replaying them; legacy stranded jobs require inspection and explicit recovery.
+
+## Worker interruption recovery
+
+The worker reconciles PostgreSQL with SAQ after each attempt. A cancelled/timed-out render becomes `PENDING` when SAQ has scheduled another attempt, or `FAILED` when its budget is exhausted. Attempts lost to a worker crash count toward the same budget when a later attempt starts. Graceful worker cancellation also updates the persisted state.
+
+For a worker killed without cleanup, a running SAQ worker's sweeper detects stuck tasks using their configured timeout (currently 1800 seconds), then retries or aborts them. The API recovery loop reflects that broker decision in PostgreSQL every two seconds. Detection is not immediate, and requires a running worker/sweeper and API. Recovery refreshes the broker record under a database row lock and ignores older dispatch generations.
+
+Missing Redis records are left unchanged rather than treated as proof of failure. SAQ terminal records currently expire after 600 seconds; recovery after Redis data loss or prolonged downtime beyond that retention still needs explicit investigation. This does not guarantee exactly-once execution. Reconciled terminal failures are counted without fabricating a processing duration for a killed process.
 
 ## Dashboard metrics and notifications
 
@@ -146,7 +154,7 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, automatic storage cleanup, recovery after Redis data loss, worker crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
+Remaining work includes authentication, automatic storage cleanup, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
 
 ## Deployment status
 

@@ -75,6 +75,11 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
         # the dispatcher died before clearing its database delivery marker.
         job.dispatch_pending = False
 
+        queued_attempt = ctx.get("job")
+        if queued_attempt:
+            # Earlier attempts may have died before incrementing PostgreSQL.
+            job.retry_count = max(job.retry_count, queued_attempt.attempts - 1)
+
         started = perf_counter()
         outcome = "failure"
         terminal_failure = False
