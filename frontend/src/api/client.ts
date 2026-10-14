@@ -91,7 +91,10 @@ export const apiClient = {
     const res = await fetch(`${API_BASE}/${jobId}/requeue`, {
       method: 'POST',
     });
-    if (!res.ok) throw new Error('Failed to requeue job');
+    if (!res.ok) {
+      const error = await res.json().catch(() => null);
+      throw new ApiError(typeof error?.detail === 'string' ? error.detail : error?.detail?.message || 'Failed to requeue job', error?.detail?.job_id);
+    }
     return res.json();
   },
 };

@@ -113,3 +113,59 @@ def test_backoff_applies_jitter(monkeypatch):
         function="process_pdf_render", attempts=2, retry_delay=2, retry_backoff=60
     )
     assert job.next_retry_delay() == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("worker_started", [False, True])
+async def test_requeue_enqueue_failure_is_recoverable_without_overwriting_worker(
+    client, monkeypatch, worker_started
+):
+    async with async_session_maker() as session:
+        job = Job(
+            filename="failed.pdf",
+            status=JobStatus.FAILED,
+            retry_count=3,
+            max_retries=3,
+            progress=40,
+            error_message="Previous rendering failure",
+            idempotency_key="retry-key",
+        )
+        session.add(job)
+        await session.commit()
+        job_id = job.id
+
+    async def unavailable(*args, **kwargs):
+        if worker_started:
+            async with async_session_maker() as session:
+                current = await session.get(Job, job_id)
+                current.status = JobStatus.PROCESSING
+                current.progress = 10
+                await session.commit()
+        raise ConnectionError("Redis connection lost")
+
+    monkeypatch.setattr("app.api.v1.jobs.queue.enqueue", unavailable)
+    response = await client.post(f"/api/v1/jobs/{job_id}/requeue")
+    assert response.status_code == 503
+    assert response.json()["detail"]["job_id"] == job_id
+    current = (await client.get(f"/api/v1/jobs/{job_id}")).json()
+    assert current["idempotency_key"] == "retry-key"
+    if worker_started:
+        assert current["status"] == "PROCESSING"
+        assert current["progress"] == 10
+    else:
+        assert current["status"] == "FAILED"
+        assert current["retry_count"] == 3
+        assert current["progress"] == 40
+        assert "Queue unavailable" in current["error_message"]
+        assert any(
+            j["id"] == job_id for j in (await client.get("/api/v1/jobs/dlq")).json()
+        )
+
+        async def available(*args, **kwargs):
+            return object()
+
+        monkeypatch.setattr("app.api.v1.jobs.queue.enqueue", available)
+        retried = await client.post(f"/api/v1/jobs/{job_id}/requeue")
+        assert retried.status_code == 200
+        assert retried.json()["status"] == "PENDING"
+        assert retried.json()["retry_count"] == 0

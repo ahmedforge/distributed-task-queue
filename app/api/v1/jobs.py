@@ -16,6 +16,7 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
+from sqlalchemy import update
 from app.core.database import get_session, async_session_maker
 from app.core.queue import queue, queue_counts
 from app.models.job import Job, JobRead, JobStatus
@@ -234,6 +235,8 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
             detail=f"Only FAILED jobs can be requeued. Current status: {job.status}",
         )
 
+    previous_retry_count = job.retry_count
+    previous_progress = job.progress
     job.status = JobStatus.PENDING
     job.retry_count = 0
     job.progress = 0
@@ -244,14 +247,39 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
     await session.commit()
     await session.refresh(job)
 
-    await queue.enqueue(
-        "process_pdf_render",
-        payload={"id": job.id, "filename": job.filename},
-        retries=job.max_retries,
-        retry_delay=settings.RETRY_BASE_DELAY,
-        retry_backoff=settings.RETRY_MAX_DELAY,
-        timeout=1800,
-    )
+    reset_at = job.updated_at
+    try:
+        await queue.enqueue(
+            "process_pdf_render",
+            payload={"id": job.id, "filename": job.filename},
+            retries=job.max_retries,
+            retry_delay=settings.RETRY_BASE_DELAY,
+            retry_backoff=settings.RETRY_MAX_DELAY,
+            timeout=1800,
+        )
+    except Exception:
+        message = "Queue unavailable. Requeue this job when Redis is available."
+        # A lost enqueue response may mean a worker already started. Do not
+        # overwrite state that has advanced since this requeue reset.
+        await session.execute(
+            update(Job)
+            .where(
+                Job.id == job_id,
+                Job.status == JobStatus.PENDING,
+                Job.retry_count == 0,
+                Job.progress == 0,
+                Job.updated_at == reset_at,
+            )
+            .values(
+                status=JobStatus.FAILED,
+                retry_count=previous_retry_count,
+                progress=previous_progress,
+                error_message=message,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.commit()
+        raise HTTPException(503, {"message": message, "job_id": job_id})
     return job
 
 
