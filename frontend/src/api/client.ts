@@ -87,6 +87,15 @@ export const apiClient = {
     return res.json();
   },
 
+  deleteJob: async (jobId: number): Promise<{ job_id: number; cleanup_pending: boolean }> => {
+    const res = await fetch(`${API_BASE}/${jobId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const error = await res.json().catch(() => null);
+      throw new ApiError(typeof error?.detail === 'string' ? error.detail : 'Failed to delete job');
+    }
+    return res.json();
+  },
+
   requeueJob: async (jobId: number): Promise<JobRead> => {
     const res = await fetch(`${API_BASE}/${jobId}/requeue`, {
       method: 'POST',

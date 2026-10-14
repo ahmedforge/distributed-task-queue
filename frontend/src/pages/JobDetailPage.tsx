@@ -1,5 +1,6 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { PageState } from '../components/PageState';
@@ -10,6 +11,7 @@ export const JobDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const jobId = Number(id);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: job, isLoading, error, connection } = useJobProgress(jobId);
   const requeue = useMutation({
     mutationFn: () => apiClient.requeueJob(jobId),
@@ -17,6 +19,17 @@ export const JobDetailPage: React.FC = () => {
       queryClient.setQueryData(['job', jobId], updated);
       queryClient.invalidateQueries({ queryKey: ['jobStats'] });
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+  });
+
+  const deletion = useMutation({
+    mutationFn: () => apiClient.deleteJob(jobId),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['jobStats'] });
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+      queryClient.removeQueries({ queryKey: ['job', jobId] });
+      toast.success(result.cleanup_pending ? 'Job removed. File cleanup will retry automatically.' : 'Job and saved files deleted.');
+      navigate('/');
     },
   });
 
@@ -44,11 +57,19 @@ export const JobDetailPage: React.FC = () => {
         </a>
       )}
       {job.status === 'FAILED' && (
-        <button className="bg-indigo-600 text-white px-4 py-2 rounded" disabled={requeue.isPending} onClick={() => requeue.mutate()}>
+        <button className="bg-indigo-600 text-white px-4 py-2 rounded" disabled={requeue.isPending || deletion.isPending} onClick={() => requeue.mutate()}>
           {requeue.isPending ? 'Requeueing...' : 'Retry job'}
         </button>
       )}
-      {requeue.error && <p role="alert">Could not requeue this job.</p>}
+      {requeue.error && <p role="alert">{requeue.error.message}</p>}
+      {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
+        <button className="block rounded border border-danger px-4 py-2 text-danger disabled:opacity-50" disabled={deletion.isPending || requeue.isPending} onClick={() => {
+          if (window.confirm('Delete this job, its original PDF, and all rendered files? This cannot be undone.')) deletion.mutate();
+        }}>
+          {deletion.isPending ? 'Deleting...' : 'Delete job and files'}
+        </button>
+      )}
+      {deletion.error && <p role="alert" className="text-danger">{deletion.error.message}</p>}
     </div>
   );
 };

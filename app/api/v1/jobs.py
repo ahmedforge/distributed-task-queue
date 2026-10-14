@@ -13,7 +13,8 @@ from fastapi import (
     Form,
     Query,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from app.deletion import cleanup_job
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
 from uuid import uuid4
@@ -40,8 +41,8 @@ async def list_jobs(
     job_status: JobStatus | None = Query(None, alias="status"),
     session: AsyncSession = Depends(get_session),
 ):
-    statement = select(Job)
-    count_statement = select(func.count(col(Job.id)))
+    statement = select(Job).where(Job.delete_pending == False)
+    count_statement = select(func.count(col(Job.id))).where(Job.delete_pending == False)
     if job_status is not None:
         statement = statement.where(Job.status == job_status)
         count_statement = count_statement.where(Job.status == job_status)
@@ -83,6 +84,10 @@ async def upload_job(
             )
         ).first()
         if existing:
+            if existing.delete_pending:
+                raise HTTPException(
+                    409, "The previous job with this idempotency key is being deleted."
+                )
             return existing
 
     root = Path(settings.STORAGE_DIR).resolve()
@@ -130,7 +135,7 @@ async def upload_job(
 @router.get("/{job_id}/result")
 async def download_result(job_id: int, session: AsyncSession = Depends(get_session)):
     job = await session.get(Job, job_id)
-    if not job:
+    if not job or job.delete_pending:
         raise HTTPException(404, "Job not found")
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(409, "The job has not completed.")
@@ -146,7 +151,11 @@ async def download_result(job_id: int, session: AsyncSession = Depends(get_sessi
 async def get_job_stats(session: AsyncSession = Depends(get_session)):
     """Fetch aggregated job metrics across database and Redis queue."""
     # 1. Aggregate database counts by status
-    statement = select(Job.status, func.count(col(Job.id))).group_by(Job.status)
+    statement = (
+        select(Job.status, func.count(col(Job.id)))
+        .where(Job.delete_pending == False)
+        .group_by(Job.status)
+    )
     results = await session.exec(statement)
     raw_counts = dict(results.all())
 
@@ -161,7 +170,11 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
     minute = func.date_trunc("minute", Job.updated_at)
     completion_rows = await session.exec(
         select(minute, func.count(col(Job.id)))
-        .where(Job.status == JobStatus.COMPLETED, Job.updated_at >= first_minute)
+        .where(
+            Job.status == JobStatus.COMPLETED,
+            Job.updated_at >= first_minute,
+            Job.delete_pending == False,
+        )
         .group_by(minute)
     )
     completions = dict(completion_rows.all())
@@ -200,7 +213,9 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
 
 @router.get("/dlq", response_model=List[JobRead])
 async def list_dlq_jobs(session: AsyncSession = Depends(get_session)):
-    statement = select(Job).where(Job.status == JobStatus.FAILED)
+    statement = select(Job).where(
+        Job.status == JobStatus.FAILED, Job.delete_pending == False
+    )
     result = await session.exec(statement)
     return result.all()
 
@@ -208,9 +223,29 @@ async def list_dlq_jobs(session: AsyncSession = Depends(get_session)):
 @router.get("/{job_id}", response_model=JobRead)
 async def get_job(job_id: int, session: AsyncSession = Depends(get_session)):
     job = await session.get(Job, job_id)
-    if not job:
+    if not job or job.delete_pending:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.delete("/{job_id}")
+async def delete_job(job_id: int, session: AsyncSession = Depends(get_session)):
+    job = (
+        await session.exec(select(Job).where(Job.id == job_id).with_for_update())
+    ).one_or_none()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status not in (JobStatus.COMPLETED, JobStatus.FAILED):
+        raise HTTPException(409, "Only completed or failed jobs can be deleted.")
+    job.delete_pending = True
+    job.dispatch_pending = False
+    session.add(job)
+    await session.commit()
+    cleaned = await cleanup_job(job_id)
+    return JSONResponse(
+        status_code=200 if cleaned else 202,
+        content={"job_id": job_id, "cleanup_pending": not cleaned},
+    )
 
 
 @router.post("/{job_id}/requeue", response_model=JobRead)
@@ -219,7 +254,7 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
     job = (
         await session.exec(select(Job).where(Job.id == job_id).with_for_update())
     ).one_or_none()
-    if not job:
+    if not job or job.delete_pending:
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job.status != JobStatus.FAILED:
@@ -257,7 +292,7 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int):
         await pubsub.subscribe(channel_name)
         async with async_session_maker() as session:
             job = await session.get(Job, job_id)
-        if not job:
+        if not job or job.delete_pending:
             await websocket.send_json({"error": f"Job {job_id} not found"})
             close_code = 4004
             return

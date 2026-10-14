@@ -9,6 +9,7 @@ from app.core.database import async_session_maker
 from app.core.queue import queue
 from app.models.job import Job, JobStatus
 from app.recovery import reconcile_stalled_jobs
+from app.deletion import cleanup_pending_deletions
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ async def dispatch_pending():
 async def dispatch_loop():
     while True:
         try:
+            await cleanup_pending_deletions()
             await dispatch_pending()
             await reconcile_stalled_jobs()
         except Exception:

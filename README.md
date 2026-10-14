@@ -1,6 +1,6 @@
 # DistribuQueue — Distributed PDF Task Queue
 
-Upload a PDF, render its pages into PNG images in a background worker, and download the images as a ZIP archive. FastAPI and React provide submission, progress, job status, failed-job requeueing, and downloads. PostgreSQL stores job state; Redis-backed SAQ executes tasks and Redis Pub/Sub delivers WebSocket progress events.
+Upload a PDF, render its pages into PNG images in a background worker, and download the images as a ZIP archive. FastAPI and React provide submission, progress, job status, failed-job requeueing, downloads, and terminal-job deletion. PostgreSQL stores job state; Redis-backed SAQ executes tasks and Redis Pub/Sub delivers WebSocket progress events.
 
 ## Architecture
 
@@ -98,6 +98,14 @@ For a worker killed without cleanup, a running SAQ worker's sweeper detects stuc
 
 Missing Redis records are left unchanged rather than treated as proof of failure. SAQ terminal records currently expire after 600 seconds; recovery after Redis data loss or prolonged downtime beyond that retention still needs explicit investigation. This does not guarantee exactly-once execution. Reconciled terminal failures are counted without fabricating a processing duration for a killed process.
 
+## Deleting jobs and saved files
+
+Completed and failed job pages offer **Delete job and files**, with confirmation. Deletion removes the original PDF, rendered ZIP, leftover scratch files, and job metadata. Pending/processing jobs cannot be deleted (HTTP 409). Requeue and deletion use the same database row lock so a claimed requeue cannot lose its input to a concurrent delete.
+
+The API first commits a deletion marker, hides the job from lists/status/downloads, then removes its job directory and database row. Storage failures return HTTP 202; the background loop retries cleanup, including after restart. Crashes after file removal leave the marker available for another pass. Permanent storage permission failures need correction before cleanup can succeed. No age-based retention policy is enabled.
+
+Deleting a job also removes its idempotency-key claim once cleanup finishes; the key may then be reused. PostgreSQL dashboard counts represent retained jobs. Historical Prometheus measurements remain; SAQ's task record expires through its normal retention. The frontend clears that job's cached status and returns to the dashboard. Theme preferences are unaffected.
+
 ## Dashboard metrics and notifications
 
 `/jobs/stats` returns an atomic Redis snapshot (ready, active, and delayed jobs), a waiting depth (ready + delayed), and completed-job counts per minute for the last 15 minutes from PostgreSQL. Unavailable queue metrics are returned as `null` with an error message; they are never displayed as a false zero.
@@ -132,6 +140,7 @@ Worker metrics are best effort. Failed metrics writes do not fail a successful r
 - `GET /api/v1/jobs/stats`: job counts.
 - `GET /api/v1/jobs/dlq`: failed jobs.
 - `POST /api/v1/jobs/{id}/requeue`: retry a failed job using its saved input.
+- `DELETE /api/v1/jobs/{id}`: delete a completed/failed job and its saved files; HTTP 200 when cleaned, or 202 with `cleanup_pending=true` when cleanup will retry.
 
 ### Try the API
 
@@ -164,7 +173,7 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, automatic storage cleanup, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
+Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
 
 ## Deployment status
 

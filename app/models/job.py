@@ -19,6 +19,7 @@ class Job(SQLModel, table=True):
     progress: int = Field(default=0, nullable=False)
     dispatch_key: Optional[str] = Field(default=None)
     dispatch_pending: bool = Field(default=False, nullable=False, index=True)
+    delete_pending: bool = Field(default=False, nullable=False, index=True)
 
     retry_count: int = Field(default=0)
     max_retries: int = Field(default=3)
