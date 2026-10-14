@@ -25,6 +25,11 @@ export interface JobStatsResponse {
   status_counts: Record<JobStatus, number>;
   dlq_count: number;
   queue_name: string;
+  sampled_at: string;
+  queue_counts: { queued: number; active: number; scheduled: number } | null;
+  queue_depth: number | null;
+  queue_error: string | null;
+  completed_per_minute: { minute: string; completed: number }[];
 }
 
 export interface JobProgressUpdate {
@@ -32,6 +37,14 @@ export interface JobProgressUpdate {
   status: JobStatus;
   progress: number;
   updated_at: string;
+}
+
+export class ApiError extends Error {
+  readonly jobId?: number;
+  constructor(message: string, jobId?: number) {
+    super(message);
+    this.jobId = jobId;
+  }
 }
 
 const API_BASE = '/api/v1/jobs';
@@ -51,7 +64,7 @@ export const apiClient = {
     const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: form });
     if (!res.ok) {
       const error = await res.json().catch(() => null);
-      throw new Error(typeof error?.detail === 'string' ? error.detail : 'Failed to upload PDF');
+      throw new ApiError(typeof error?.detail === 'string' ? error.detail : error?.detail?.message || 'Failed to upload PDF', error?.detail?.job_id);
     }
     return res.json();
   },

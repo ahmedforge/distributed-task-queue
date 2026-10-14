@@ -1,1 +1,51 @@
 @import "tailwindcss";
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-panel-alt: var(--panel-alt);
+  --color-border: var(--border);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-danger: var(--danger);
+}
+
+:root {
+  color-scheme: dark;
+  --surface: #0b1020;
+  --panel: #151c30;
+  --panel-alt: #1b2540;
+  --border: #2c3852;
+  --fg: #edf2ff;
+  --muted: #a4b0c6;
+  --primary: #a5b4fc;
+  --danger: #fda4af;
+  --success: #34d399;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface: #f5f7fc;
+  --panel: #ffffff;
+  --panel-alt: #edf1f9;
+  --border: #cbd5e1;
+  --fg: #17233b;
+  --muted: #52627b;
+  --primary: #4338ca;
+  --danger: #be123c;
+  --success: #047857;
+}
+body { margin: 0; background: var(--surface); color: var(--fg); }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), select { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.status-pill { display: inline-block; border-radius: 999px; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 600; color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.status-pill[data-status="PROCESSING"] { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.status-pill[data-status="COMPLETED"] { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.status-pill[data-status="FAILED"] { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+progress { height: 0.5rem; border: 0; border-radius: 999px; overflow: hidden; background: var(--border); accent-color: #6366f1; }
+progress::-webkit-progress-bar { background: var(--border); border-radius: 999px; }
+progress::-webkit-progress-value { background: #6366f1; border-radius: 999px; }
+progress::-moz-progress-bar { background: #6366f1; border-radius: 999px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
