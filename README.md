@@ -1,17 +1,62 @@
-# Distributed PDF Task Queue
+# DistribuQueue — Distributed PDF Task Queue
 
 Upload a PDF, render its pages into PNG images in a background worker, and download the images as a ZIP archive. FastAPI and React provide submission, progress, job status, failed-job requeueing, and downloads. PostgreSQL stores job state; Redis-backed SAQ executes tasks and Redis Pub/Sub delivers WebSocket progress events.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    UI[React dashboard] -->|Upload, status, download| API[FastAPI API]
+    API -->|Persist job state| DB[(PostgreSQL)]
+    API -->|Enqueue task| Redis[(Redis / SAQ)]
+    Redis -->|Dispatch and retry| Worker[PDF worker / Poppler]
+    Worker -->|Progress and outcome| DB
+    API --> Files[(Shared PDF and ZIP storage)]
+    Worker --> Files
+    Worker -->|Progress events and metrics| Redis
+    Redis -->|Pub/Sub| API
+    API -->|WebSocket progress| UI
+    Prom[Prometheus] -->|Scrape /metrics| API
+    Grafana[Grafana] -->|Query history| Prom
+```
+
+Uploads return after the input is saved and the task is enqueued; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and the shared Docker volume holds original PDFs and rendered ZIPs.
+
+## Stack
+
+| Layer | Technology |
+| --- | --- |
+| API and persistence | Python 3.12, FastAPI, SQLModel, async SQLAlchemy, PostgreSQL, Alembic |
+| Background processing | Redis, SAQ, Poppler |
+| Dashboard | React, TypeScript, Vite, TanStack Query, Tailwind CSS, Recharts |
+| Monitoring | Prometheus, Grafana |
+| Delivery and verification | Docker Compose, GitHub Actions, pytest, Black, Oxlint |
+
+## What this demonstrates
+
+- Separating request handling from background execution, with a persistent job lifecycle.
+- Idempotency-key lookup for repeated submissions, bounded retries with jitter, and manual recovery of failed jobs.
+- Redis Pub/Sub and WebSockets for live progress, with reconnect and REST polling when connections drop.
+- Database migrations, container networking, shared storage, and independent API/worker processes.
+- Request latency, queue depth, attempt outcomes, and processing-time measurements across processes.
+
+This is a working portfolio project, with explicit reliability limits listed below. It does not claim exactly-once processing or measured production-scale throughput.
+
 ## Run locally with Docker
 
+Requires Docker Compose, Node.js 22, and npm. From the repository root:
+
 ```bash
+[ -f .env ] || cp .env.example .env
 docker compose up --build -d
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
 Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8001/docs.
+
+For an existing PostgreSQL volume, set `POSTGRES_PASSWORD` in `.env` to its existing password. PostgreSQL initialization variables do not change credentials in an already-initialized volume. The API uses host port 8001; its internal Docker port remains 8000.
 
 The Docker image installs Poppler (`pdfinfo` and `pdftoppm`). API and worker containers share the `job_files` volume, so uploads and results survive container restarts. API processes run as a non-root user.
 
@@ -62,6 +107,29 @@ Worker metrics are best effort. Failed metrics writes do not fail a successful r
 - `GET /api/v1/jobs/dlq`: failed jobs.
 - `POST /api/v1/jobs/{id}/requeue`: retry a failed job using its saved input.
 
+### Try the API
+
+Submit a PDF (replace the file path):
+
+```bash
+curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/upload \
+  -F 'file=@sample.pdf;type=application/pdf' \
+  -F 'max_retries=3' \
+  -F 'idempotency_key=demo-upload-001'
+```
+
+Use the returned job ID in place of `123`:
+
+```bash
+curl --fail-with-body http://localhost:8001/api/v1/jobs/123
+# After the status becomes COMPLETED:
+curl --fail-with-body http://localhost:8001/api/v1/jobs/123/result -o pages.zip
+# For a FAILED job:
+curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/123/requeue
+```
+
+Reusing an idempotency key returns the existing job; use a new key for a new upload. Interactive API documentation is at [Swagger UI](http://localhost:8001/docs).
+
 Filename-only JSON submissions are no longer supported. Jobs created before file uploads were added have no PDF input and must be submitted again through the upload form.
 
 ## Validation and remaining scope
@@ -71,3 +139,19 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
 Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
+
+## Deployment status
+
+Docker Compose runs the backend and optional monitoring on one machine. The React dashboard currently runs separately through Vite. GitHub Actions validates backend code, migrations, and the frontend build; it does not publish images or perform deployment. Terraform, AWS infrastructure, Kubernetes, and automated cloud delivery are not implemented.
+
+Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
+
+## Demo capture checklist
+
+Capture these after submitting real jobs; omit credentials and personal filenames:
+
+1. Dashboard with completed, active, and failed jobs plus throughput and queue charts.
+2. A short clip of PDF submission and live page-rendering progress.
+3. Completed-job detail with ZIP download and the extracted PNG pages.
+4. Failed-job error and successful manual requeue.
+5. Grafana overview after a mix of successful and failed attempts.
