@@ -1,0 +1,53 @@
+{
+  "format": "Edited screenshot walkthrough, not continuous screen recording",
+  "duration_seconds": 60,
+  "data": "Synthetic PDFs on isolated disposable Docker services",
+  "application_behavior_changed": false,
+  "scenes": [
+    {
+      "source": "title",
+      "duration_seconds": 5,
+      "caption": "DistribuQueue\nLocal portfolio demo\nScreenshot walkthrough - synthetic documents"
+    },
+    {
+      "source": "01-dashboard-active-viewport.png",
+      "duration_seconds": 8,
+      "caption": "Dashboard: queue history and completed-job throughput"
+    },
+    {
+      "source": "02-upload.png",
+      "duration_seconds": 8,
+      "caption": "Upload a PDF with an optional idempotency key"
+    },
+    {
+      "source": "03-live-progress.png",
+      "duration_seconds": 8,
+      "caption": "A real rendering checkpoint delivered over WebSocket"
+    },
+    {
+      "source": "04-completed.png",
+      "duration_seconds": 8,
+      "caption": "Completed: download ZIP or delete the job and saved files"
+    },
+    {
+      "source": "05-failed-jobs.png",
+      "duration_seconds": 8,
+      "caption": "Failed jobs retain error details and a manual retry action"
+    },
+    {
+      "source": "06-grafana.png",
+      "duration_seconds": 5,
+      "caption": "Provisioned Grafana: request latency and job outcomes"
+    },
+    {
+      "source": "07-grafana-worker-metrics.png",
+      "duration_seconds": 5,
+      "caption": "Queue depth, attempt throughput, duration and failures"
+    },
+    {
+      "source": "results",
+      "duration_seconds": 5,
+      "caption": "Recorded local benchmark\n40 two-page PDFs / 21.78 seconds / 1.84 jobs per second\n4 interrupted jobs recovered after SIGKILL\nCrash test: 30-second task timeout; Redis and storage retained"
+    }
+  ]
+}

@@ -1,32 +1,25 @@
-# React + TypeScript + Vite
+# DistribuQueue dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + TypeScript + Vite dashboard for the PDF task queue. It includes upload, paginated/filterable job lists, live progress with reconnect/polling fallback, failed-job retry, ZIP downloads, terminal-job deletion, charts, and theme preferences.
 
-Currently, two official plugins are available:
+## Run the full app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+From the repository root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open http://localhost:3000. The built frontend runs in an unprivileged Nginx container; `/api/` REST and WebSocket traffic proxies to the API container. Set `FRONTEND_PORT` in the root `.env` if port 3000 is occupied.
+
+## Develop with live reload
+
+Requires Node.js 22 and npm. Start the backend from the repository root, then run:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+The development proxy targets http://localhost:8001. Stop the Docker frontend before using Vite on port 3000. `npm run lint` runs Oxlint; `npm run build` typechecks and creates the production bundle. See the root README for backend setup, metrics, and limitations.

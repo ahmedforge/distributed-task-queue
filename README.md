@@ -2,6 +2,13 @@
 
 Upload a PDF, render its pages into PNG images in a background worker, and download the images as a ZIP archive. FastAPI and React provide submission, progress, job status, failed-job requeueing, downloads, and terminal-job deletion. PostgreSQL stores job state; Redis-backed SAQ executes tasks and Redis Pub/Sub delivers WebSocket progress events.
 
+![DistribuQueue dashboard](docs/demo/01-dashboard-active-viewport.png)
+
+[60-second screenshot walkthrough](docs/demo/walkthrough.mp4) · [GIF preview](docs/demo/preview.gif) · [Screenshots](docs/demo/README.md) · [Benchmark evidence](docs/benchmarks/README.md) · [Resume and interview notes](docs/portfolio.md)
+
+**Local v1 is feature-complete.** Latest backend validation: 76 passing tests. One controlled run completed 40 synthetic two-page PDFs in 21.78 seconds and recovered four interrupted jobs after a worker SIGKILL. See the workload and timeout qualifications in the benchmark report.
+
+
 ## Architecture
 
 ```mermaid
@@ -173,7 +180,7 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
+Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment is implemented. Recorded local load/crash measurements are linked below.
 
 ## Measured local validation
 
@@ -183,9 +190,9 @@ These are finite-batch results for simple generated PDFs, not sustained capacity
 
 ## v1 finish line
 
-This release is a local portfolio demo. The recorded load/crash check is complete. Its fixed remaining acceptance check is a short demo with screenshots and evidence-backed resume bullets. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
+This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The feature scope is frozen; remaining publication is committing and pushing the final documentation/media. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
 
-Cloud deployment, Kubernetes/KEDA autoscaling, object storage, full authentication, and age-based retention are v2. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment; no throughput or crash-loss claims are made before measurement.
+Cloud deployment, Kubernetes/KEDA autoscaling, object storage, full authentication, and age-based retention are v2. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
 
 ## Deployment status
 
@@ -193,12 +200,8 @@ Docker Compose runs the frontend, backend, and optional monitoring on one machin
 
 Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
 
-## Demo capture checklist
+## Demo and presentation
 
-Capture these after submitting real jobs; omit credentials and personal filenames:
+The [demo asset index](docs/demo/README.md) contains actual screenshots of submission, live processing, completion, failed-job management, and Grafana. The [60-second walkthrough](docs/demo/walkthrough.mp4) is an edited screenshot sequence with synthetic inputs. A real browser upload completed and its downloaded ZIP was verified to contain 30 PNG pages.
 
-1. Dashboard with completed, active, and failed jobs plus throughput and queue charts.
-2. A short clip of PDF submission and live page-rendering progress.
-3. Completed-job detail with ZIP download and the extracted PNG pages.
-4. Failed-job error and successful manual requeue.
-5. Grafana overview after a mix of successful and failed attempts.
+Use the [portfolio notes](docs/portfolio.md) for concise resume bullets, the idempotency-race story, and explanations of durable dispatch, worker recovery, deletion, and their limits.
