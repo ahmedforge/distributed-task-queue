@@ -72,6 +72,14 @@ For running the API/worker outside Docker, install `poppler-utils`, install Pyth
 - Uses job IDs for storage paths; original upload names are display metadata. Rendering subprocesses have a 30-second timeout each.
 - A failed Redis progress notification is logged; it does not change the persisted task outcome. The polling UI can still retrieve the state.
 
+## Durable queue delivery
+
+Each upload or manual requeue saves a unique delivery key and a pending-delivery marker in the same PostgreSQL transaction as the job state. The API tries immediate delivery to SAQ; its background dispatcher also checks committed markers every two seconds, including after API restart. Redis outages leave accepted jobs `PENDING` for automatic delivery rather than moving them into the failed-job list. Uploads return HTTP 201 and requeues return HTTP 200 once their intent is saved, even when Redis is temporarily unavailable.
+
+Delivery uses the same SAQ key until acknowledged. A worker receipt clears the marker before rendering; completed/failed jobs and tasks from older requeue generations are not rendered again. PostgreSQL row locks serialize delivery claims and manual requeues. This closes the API-crash gap between saving a job and enqueueing it; it does not provide exactly-once execution or recover work lost after an acknowledged delivery if Redis loses its data. Worker crashes/timeouts and storage cleanup remain separate work.
+
+The API must remain running for automatic dispatch retries. The migration preserves existing jobs without replaying them; legacy stranded jobs require inspection and explicit recovery.
+
 ## Dashboard metrics and notifications
 
 `/jobs/stats` returns an atomic Redis snapshot (ready, active, and delayed jobs), a waiting depth (ready + delayed), and completed-job counts per minute for the last 15 minutes from PostgreSQL. Unavailable queue metrics are returned as `null` with an error message; they are never displayed as a false zero.
@@ -138,7 +146,7 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
+Remaining work includes authentication, automatic storage cleanup, recovery after Redis data loss, worker crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
 
 ## Deployment status
 

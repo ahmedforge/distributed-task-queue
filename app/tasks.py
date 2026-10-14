@@ -3,6 +3,7 @@ import logging
 from time import perf_counter
 from datetime import datetime, timezone
 from typing import Any, Dict
+from sqlmodel import select
 
 import redis.asyncio as aioredis
 
@@ -58,10 +59,21 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
 
     async with async_session_maker() as session:
         # 1. Fetch job and update status to PROCESSING
-        job = await session.get(Job, job_id)
+        job = (
+            await session.exec(select(Job).where(Job.id == job_id).with_for_update())
+        ).one_or_none()
         if not job:
             logger.warning(f"Job ID {job_id} not found in database.")
             return
+
+        dispatch_key = payload.get("dispatch_key")
+        if dispatch_key and dispatch_key != job.dispatch_key:
+            return  # Ignore a delivery belonging to a previous requeue generation.
+        if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+            return
+        # A worker receipt resolves a lost enqueue acknowledgement, even if
+        # the dispatcher died before clearing its database delivery marker.
+        job.dispatch_pending = False
 
         started = perf_counter()
         outcome = "failure"

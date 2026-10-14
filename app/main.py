@@ -1,10 +1,25 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
+from app.dispatch import dispatch_loop
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.observability import HTTP_REGISTRY, metrics_response
 from app.core.config import settings
 from app.api.v1.jobs import router as jobs_router
 
-app = FastAPI(title=settings.PROJECT_NAME)
+
+@asynccontextmanager
+async def lifespan(app):
+    dispatcher = asyncio.create_task(dispatch_loop())
+    try:
+        yield
+    finally:
+        dispatcher.cancel()
+        with suppress(asyncio.CancelledError):
+            await dispatcher
+
+
+app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
 app.include_router(jobs_router, prefix="/api/v1/jobs", tags=["Jobs"])
 
