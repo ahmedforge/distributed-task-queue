@@ -175,9 +175,15 @@ The migration checker creates a new database whose name ends in `_migrations`, t
 
 Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
 
+## Measured local validation
+
+In one controlled local run, a worker limited to 2 CPUs and 1 GiB completed **40 synthetic two-page PDFs in 21.78 seconds (1.84 jobs/second)**. All 40 ZIPs passed integrity, page-count, and PNG-signature checks. A separate real worker SIGKILL interrupted four ten-page jobs; all four recovered and produced valid ZIPs in 88.17 seconds with Redis/storage preserved and a benchmark-only 30-second task timeout. The normal application timeout is 1800 seconds.
+
+These are finite-batch results for simple generated PDFs, not sustained capacity or a zero-loss guarantee. See the [benchmark report and reproduction instructions](docs/benchmarks/README.md) and [raw observations](docs/benchmarks/latest.json).
+
 ## v1 finish line
 
-This release is a local portfolio demo. Its fixed remaining acceptance checks are a recorded load/crash test and a short demo with screenshots and evidence-backed resume bullets. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
+This release is a local portfolio demo. The recorded load/crash check is complete. Its fixed remaining acceptance check is a short demo with screenshots and evidence-backed resume bullets. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
 
 Cloud deployment, Kubernetes/KEDA autoscaling, object storage, full authentication, and age-based retention are v2. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment; no throughput or crash-loss claims are made before measurement.
 
