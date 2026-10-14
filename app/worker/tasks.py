@@ -56,14 +56,18 @@ async def process_pdf_render(ctx, *, payload: dict) -> dict:
             # Dead Letter Queue (DLQ) Logic
             if job.retry_count >= job.max_retries:
                 job.status = JobStatus.FAILED
-                logger.error(f"Job {job_id} exhausted retries ({job.retry_count}/{job.max_retries}). Moved to DLQ (FAILED).")
+                logger.error(
+                    f"Job {job_id} exhausted retries ({job.retry_count}/{job.max_retries}). Moved to DLQ (FAILED)."
+                )
             else:
                 job.status = JobStatus.PENDING
-                logger.warning(f"Job {job_id} failed ({job.retry_count}/{job.max_retries}). Marking PENDING for retry.")
+                logger.warning(
+                    f"Job {job_id} failed ({job.retry_count}/{job.max_retries}). Marking PENDING for retry."
+                )
 
             session.add(job)
             await session.commit()
-            
+
             # Re-raise so SAQ marks the task execution context as failed
             raise
 

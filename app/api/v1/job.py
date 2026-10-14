@@ -9,10 +9,11 @@ from app.schemas.job import JobProgressUpdate
 
 router = APIRouter()
 
+
 @router.websocket("/jobs/{job_id}/ws")
 async def job_progress_websocket(websocket: WebSocket, job_id: int):
     await websocket.accept()
-    
+
     # 1. Query initial DB state
     async with async_session_maker() as session:
         statement = select(Job).where(Job.id == job_id)
@@ -29,9 +30,9 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int):
         job_id=job.id,
         status=job.status,
         progress=job.progress,
-        updated_at=job.updated_at
+        updated_at=job.updated_at,
     ).model_dump_json()
-    
+
     await websocket.send_text(initial_payload)
 
     # 3. Close immediately if job already completed or failed (Late Subscriber)
@@ -50,7 +51,7 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int):
             if message["type"] == "message":
                 data_str = message["data"].decode("utf-8")
                 await websocket.send_text(data_str)
-                
+
                 update = JobProgressUpdate.model_validate_json(data_str)
                 if update.status in (JobStatus.COMPLETED, JobStatus.FAILED):
                     break

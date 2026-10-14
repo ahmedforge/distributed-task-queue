@@ -8,34 +8,34 @@ from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
 from app.schemas.job import JobProgressUpdate
 
-async def report_progress(job_id: int, progress: int, status: JobStatus, error_message: str = None):
+
+async def report_progress(
+    job_id: int, progress: int, status: JobStatus, error_message: str = None
+):
     """Update job state in PostgreSQL and publish progress to Redis Pub/Sub."""
     now = datetime.now(timezone.utc)
-    
+
     # 1. Update PostgreSQL
     async with async_session_maker() as session:
         statement = select(Job).where(Job.id == job_id)
         result = await session.exec(statement)
         job = result.one()
-        
+
         job.progress = progress
         job.status = status
         job.updated_at = now
         if error_message:
             job.error_message = error_message
-            
+
         session.add(job)
         await session.commit()
 
     # 2. Publish to Redis channel
     redis_client = aioredis.from_url(settings.REDIS_URL)
     payload = JobProgressUpdate(
-        job_id=job_id,
-        status=status,
-        progress=progress,
-        updated_at=now
+        job_id=job_id, status=status, progress=progress, updated_at=now
     ).model_dump_json()
-    
+
     await redis_client.publish(f"job_progress:{job_id}", payload)
     await redis_client.aclose()
 
@@ -60,9 +60,6 @@ async def process_pdf_render(ctx, job_id: int):
 
     except Exception as e:
         await report_progress(
-            job_id, 
-            progress=100, 
-            status=JobStatus.FAILED, 
-            error_message=str(e)
+            job_id, progress=100, status=JobStatus.FAILED, error_message=str(e)
         )
         raise e

@@ -41,8 +41,8 @@ async def report_progress(session, job: Job, progress: int, status: JobStatus):
 
 async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
     """Background task function to process PDF rendering.
-    
-    Handles both direct kwargs (id=1, filename='foo.pdf') 
+
+    Handles both direct kwargs (id=1, filename='foo.pdf')
     and dictionary wrapped kwargs (payload={'id': 1, 'filename': 'foo.pdf'}).
     """
     # Extract payload regardless of how SAQ unpacked kwargs
@@ -63,6 +63,7 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
         await report_progress(session, job, 0, JobStatus.PROCESSING)
 
         try:
+
             async def on_progress(progress: int):
                 await report_progress(session, job, progress, JobStatus.PROCESSING)
 

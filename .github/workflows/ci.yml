@@ -2,15 +2,22 @@ name: CI Workflow
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    # Match the individual variables consumed by app.core.config.Settings.
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       POSTGRES_SERVER: 127.0.0.1
       POSTGRES_PORT: '5433'
@@ -19,7 +26,6 @@ jobs:
       POSTGRES_DB: task_queue
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: '6379'
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -29,63 +35,67 @@ jobs:
         ports:
           - 5433:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd "pg_isready -U postgres -d task_queue"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 10s
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-
+          --health-retries 10
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
-
+          python-version: '3.12'
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: latest
+          version: '2.5.1'
           virtualenvs-create: true
           virtualenvs-in-project: true
-
-      - name: Cache Poetry Dependencies
-        uses: actions/cache@v4
+      - name: Cache Python environment
+        uses: actions/cache@v6
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
-
-      - name: Install PDF Renderer
+          key: venv-${{ runner.os }}-py312-poetry251-${{ hashFiles('poetry.lock') }}
+      - name: Install PDF renderer
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
-
-      - name: Install Dependencies
-        run: poetry install --no-interaction
-
-      - name: Initialize Database Schema
+      - name: Check lockfile and install dependencies
         run: |
-          poetry run python -c "
-          import asyncio
-          from sqlmodel import SQLModel
-          from app.core.database import engine
-          from app.models.job import Job
+          poetry check --lock
+          poetry install --no-interaction
+      - name: Check Python formatting
+        run: poetry run black --check app worker tests alembic scripts
+      - name: Check migration lifecycle on a separate fresh database
+        env:
+          POSTGRES_DB: task_queue_migrations
+        run: poetry run python scripts/check_migrations.py
+      - name: Run backend tests
+        run: poetry run pytest -q
 
-          async def init():
-              async with engine.begin() as conn:
-                  await conn.run_sync(SQLModel.metadata.create_all)
-
-          asyncio.run(init())
-          "
-
-      - name: Run Pytest Suite
-        run: poetry run pytest -v
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Lint frontend
+        run: npm run lint
+      - name: Typecheck and build frontend
+        run: npm run build

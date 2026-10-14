@@ -48,6 +48,8 @@ Filename-only JSON submissions are no longer supported. Jobs created before file
 
 ## Validation and remaining scope
 
-Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including upload-to-download, retry exhaustion, idempotent submission, and WebSocket delivery. Test fixtures create and drop tables: use a disposable test database. GitHub Actions provides isolated services and installs Poppler.
+Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including upload-to-download, retry exhaustion, idempotent submission, and WebSocket delivery. Test fixtures create and drop tables: use a disposable test database. GitHub Actions runs separate backend and frontend checks on pushes and pull requests to `main`. Backend checks validate the Poetry lockfile, Black formatting, the migration lifecycle, and pytest using isolated PostgreSQL/Redis services and Poppler. Frontend checks install with `npm ci`, lint with Oxlint, and typecheck/build with TypeScript and Vite.
+
+The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
 Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. No Kubernetes deployment or throughput benchmark is implemented yet.

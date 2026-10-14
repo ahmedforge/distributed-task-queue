@@ -36,7 +36,8 @@ class Job(SQLModel, table=True):
 class JobCreate(SQLModel):
     filename: str
     max_retries: int = Field(
-        default=3, ge=1,
+        default=3,
+        ge=1,
         description="Maximum total processing attempts, including the first attempt.",
     )
     idempotency_key: Optional[str] = None
