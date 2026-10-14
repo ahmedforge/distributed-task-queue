@@ -18,6 +18,7 @@ from app.deletion import cleanup_job
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
 from uuid import uuid4
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app.dispatch import dispatch_job
 from app.core.database import get_session, async_session_maker
 from app.core.queue import queue, queue_counts
@@ -118,8 +119,29 @@ async def upload_job(
             dispatch_key=uuid4().hex,
             dispatch_pending=True,
         )
-        session.add(job)
-        await session.flush()
+        # PostgreSQL arbitrates simultaneous submissions. A losing request
+        # waits for the winner to commit, then returns its saved job without
+        # writing input files or dispatching another task.
+        statement = (
+            pg_insert(Job)
+            .values(**job.model_dump(exclude={"id"}))
+            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .returning(Job.id)
+        )
+        inserted_id = (await session.exec(statement)).scalar_one_or_none()
+        if inserted_id is None:
+            existing = (
+                await session.exec(
+                    select(Job).where(Job.idempotency_key == idempotency_key)
+                )
+            ).one_or_none()
+            if existing is None or existing.delete_pending:
+                raise HTTPException(
+                    409,
+                    "The job for this idempotency key is being deleted. Retry the upload after deletion finishes.",
+                )
+            return existing
+        job = await session.get(Job, inserted_id)
         job_directory(job.id).mkdir(parents=True, exist_ok=True)
         temporary.replace(input_path(job.id))
         await session.commit()

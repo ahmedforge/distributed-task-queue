@@ -35,7 +35,7 @@ Uploads return after the input and durable delivery intent are saved; PDF render
 ## What this demonstrates
 
 - Separating request handling from background execution, with a persistent job lifecycle.
-- Idempotency-key lookup for repeated submissions, bounded retries with jitter, and manual recovery of failed jobs.
+- Database-enforced idempotency for repeated and simultaneous submissions, bounded retries with jitter, and manual recovery of failed jobs.
 - Redis Pub/Sub and WebSockets for live progress, with reconnect and REST polling when connections drop.
 - Database migrations, container networking, shared storage, and independent API/worker processes.
 - Request latency, queue depth, attempt outcomes, and processing-time measurements across processes.
@@ -174,6 +174,12 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
 Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
+
+## v1 finish line
+
+This release is a local portfolio demo. Its fixed remaining acceptance checks are a recorded load/crash test and a short demo with screenshots and evidence-backed resume bullets. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
+
+Cloud deployment, Kubernetes/KEDA autoscaling, object storage, full authentication, and age-based retention are v2. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment; no throughput or crash-loss claims are made before measurement.
 
 ## Deployment status
 
