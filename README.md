@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8000/docs.
+Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8001/docs.
 
 The Docker image installs Poppler (`pdfinfo` and `pdftoppm`). API and worker containers share the `job_files` volume, so uploads and results survive container restarts. API processes run as a non-root user.
 
@@ -33,6 +33,24 @@ For running the API/worker outside Docker, install `poppler-utils`, install Pyth
 
 The queue chart keeps up to 60 samples in the current browser session, sampled every three seconds while the dashboard is open. History resets on reload; it is not persisted monitoring history. The completion chart includes the current, partial minute. Completion/failure notifications appear when a watched job changes from a non-terminal state, using the existing live progress cache and polling fallback. Opening an already-finished job does not produce a new notification.
 
+## Prometheus and Grafana
+
+Start the app plus monitoring:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d
+```
+
+- Grafana: http://localhost:3001, initially `admin` / `admin`. Set `GRAFANA_ADMIN_PASSWORD` in `.env` before the first start to choose a different initial password.
+- Prometheus: http://localhost:9090.
+- Raw API metrics: http://localhost:8001/metrics.
+
+The Prometheus data source and **DistribuQueue Overview** dashboard are provisioned automatically. Prometheus scrapes every 5 seconds and retains 7 days of history in its Docker volume. Grafana settings also use a persistent volume. Monitoring ports bind to localhost. Rate/percentile panels need multiple scrapes and some activity; an idle window may show no data.
+
+API instrumentation exports request counts and latency histograms by route template. Workers aggregate attempt counts, processing-time histograms, and terminal failures in Redis; the API exports the shared totals, so measurements include separate worker processes. Queue gauges report ready, active, and delayed jobs. Retries are separate attempts; durations exclude queue wait and retry delay. A failed/cancelled attempt differs from a terminal failure that exhausts the retry budget.
+
+Worker metrics are best effort. Failed metrics writes do not fail a successful render. If Redis cannot be scraped, `/metrics` reports `dtq_redis_metrics_available=0` and omits worker/queue values instead of inventing zeros. Redis counter totals reset if its data is lost; historical samples remain in Prometheus. The supplied setup uses one API exporter; if you scale API replicas, scrape one designated exporter for shared Redis totals to avoid double-counting them.
+
 ## API
 
 - `POST /api/v1/jobs/upload`: multipart fields `file`, optional `max_retries` and `idempotency_key`.
@@ -52,4 +70,4 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. No Kubernetes deployment or throughput benchmark is implemented yet.
+Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment or load benchmark is implemented yet.
