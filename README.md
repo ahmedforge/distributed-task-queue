@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The job page polls status every second and offers a ZIP download when processing completes. API documentation is available at http://localhost:8000/docs.
+Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8000/docs.
 
 The Docker image installs Poppler (`pdfinfo` and `pdftoppm`). API and worker containers share the `job_files` volume, so uploads and results survive container restarts. API processes run as a non-root user.
 
@@ -26,6 +26,12 @@ For running the API/worker outside Docker, install `poppler-utils`, install Pyth
 - Automatic retries use exponential backoff with jitter: default windows are 2, 4, 8 seconds, doubling up to a 60-second cap. SAQ chooses a random delay within each window. Configure `RETRY_BASE_DELAY` and `RETRY_MAX_DELAY` in seconds; both must be positive. The worker scheduler dispatches due retries, so actual start times may be slightly later. Manual requeue starts a fresh immediate attempt.
 - Uses job IDs for storage paths; original upload names are display metadata. Rendering subprocesses have a 30-second timeout each.
 - A failed Redis progress notification is logged; it does not change the persisted task outcome. The polling UI can still retrieve the state.
+
+## Dashboard metrics and notifications
+
+`/jobs/stats` returns an atomic Redis snapshot (ready, active, and delayed jobs), a waiting depth (ready + delayed), and completed-job counts per minute for the last 15 minutes from PostgreSQL. Unavailable queue metrics are returned as `null` with an error message; they are never displayed as a false zero.
+
+The queue chart keeps up to 60 samples in the current browser session, sampled every three seconds while the dashboard is open. History resets on reload; it is not persisted monitoring history. The completion chart includes the current, partial minute. Completion/failure notifications appear when a watched job changes from a non-terminal state, using the existing live progress cache and polling fallback. Opening an already-finished job does not produce a new notification.
 
 ## API
 
@@ -44,4 +50,4 @@ Filename-only JSON submissions are no longer supported. Jobs created before file
 
 Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including upload-to-download, retry exhaustion, idempotent submission, and WebSocket delivery. Test fixtures create and drop tables: use a disposable test database. GitHub Actions provides isolated services and installs Poppler.
 
-Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery, frontend WebSocket reconnection. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. No Kubernetes deployment or throughput benchmark is implemented yet.
+Remaining work includes authentication, automatic storage cleanup, reliable database-to-queue handoff, crash/timeout recovery. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. No Kubernetes deployment or throughput benchmark is implemented yet.

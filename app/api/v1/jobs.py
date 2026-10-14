@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List
 from pathlib import Path
 import tempfile
@@ -16,12 +16,13 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
-from app.core.database import get_session
-from app.core.queue import queue
+from app.core.database import get_session, async_session_maker
+from app.core.queue import queue, queue_counts
 from app.models.job import Job, JobRead, JobStatus
 from app.schemas.job import JobProgressUpdate, JobStatsResponse, JobListResponse
 import redis.asyncio as aioredis
 from fastapi import WebSocket, WebSocketDisconnect
+from redis.exceptions import RedisError
 from app.core.config import settings
 from app.core.storage import input_path, result_path, job_directory
 
@@ -164,11 +165,45 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
     total_jobs = sum(status_counts.values())
     dlq_count = status_counts.get(JobStatus.FAILED.value, 0)
 
+    sampled_at = datetime.now(timezone.utc)
+    first_minute = sampled_at.replace(second=0, microsecond=0) - timedelta(minutes=14)
+    minute = func.date_trunc("minute", Job.updated_at)
+    completion_rows = await session.exec(
+        select(minute, func.count(col(Job.id)))
+        .where(Job.status == JobStatus.COMPLETED, Job.updated_at >= first_minute)
+        .group_by(minute)
+    )
+    completions = dict(completion_rows.all())
+    throughput = [
+        {
+            "minute": first_minute + timedelta(minutes=index),
+            "completed": completions.get(first_minute + timedelta(minutes=index), 0),
+        }
+        for index in range(15)
+    ]
+    try:
+        broker_counts = await asyncio.wait_for(queue_counts(queue), timeout=2)
+        queue_error = None
+    except (RedisError, OSError, TimeoutError):
+        broker_counts = None
+        queue_error = (
+            "Redis queue metrics are unavailable. Document counts remain available."
+        )
+
     return JobStatsResponse(
         total_jobs=total_jobs,
         status_counts=status_counts,
         dlq_count=dlq_count,
         queue_name=queue.name,
+        sampled_at=sampled_at,
+        queue_counts=broker_counts,
+        queue_depth=(
+            (broker_counts["queued"] + broker_counts["scheduled"])
+            if broker_counts
+            else None
+        ),
+        queue_error=queue_error,
+        completed_per_minute=throughput,
     )
 
 
@@ -221,59 +256,82 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
 
 
 @router.websocket("/{job_id}/ws")
-async def job_progress_websocket(
-    websocket: WebSocket,
-    job_id: int,
-    session: AsyncSession = Depends(get_session),
-):
+async def job_progress_websocket(websocket: WebSocket, job_id: int):
     await websocket.accept()
-
-    # 1. Fetch job state
-    job = await session.get(Job, job_id)
-
-    if not job:
-        await websocket.send_json({"error": f"Job {job_id} not found"})
-        await websocket.close(code=4004)
-        return
-
-    # 2. Initial state payload
-    initial_payload = JobProgressUpdate(
-        job_id=job.id,
-        status=job.status,
-        progress=job.progress,
-        updated_at=job.updated_at,
-    ).model_dump_json()
-
-    await websocket.send_text(initial_payload)
-
-    # Late subscriber check
-    if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
-        await websocket.close(code=1000)
-        return
-
-    # 3. Redis Pub/Sub subscription
-    redis_client = aioredis.from_url(settings.REDIS_URL)
+    redis_client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
     pubsub = redis_client.pubsub()
     channel_name = f"job_progress:{job_id}"
-    await pubsub.subscribe(channel_name)
-
+    receive_task = message_task = None
+    close_code = 1000
     try:
-        async for message in pubsub.listen():
-            if message["type"] == "message":
-                data_str = message["data"].decode("utf-8")
-                await websocket.send_text(data_str)
+        # Subscribe first, so updates during the snapshot query remain buffered.
+        await pubsub.subscribe(channel_name)
+        async with async_session_maker() as session:
+            job = await session.get(Job, job_id)
+        if not job:
+            await websocket.send_json({"error": f"Job {job_id} not found"})
+            close_code = 4004
+            return
 
-                update = JobProgressUpdate.model_validate_json(data_str)
+        initial = JobProgressUpdate(
+            job_id=job.id,
+            status=job.status,
+            progress=job.progress,
+            updated_at=job.updated_at,
+        )
+        await websocket.send_text(initial.model_dump_json())
+        if job.status in (JobStatus.COMPLETED, JobStatus.FAILED):
+            return
+
+        last_updated = job.updated_at
+        receive_task = asyncio.create_task(websocket.receive())
+        message_task = asyncio.create_task(
+            pubsub.get_message(
+                ignore_subscribe_messages=True,
+                timeout=1,
+            )
+        )
+        while True:
+            done, _ = await asyncio.wait(
+                [receive_task, message_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if receive_task in done:
+                if receive_task.result()["type"] == "websocket.disconnect":
+                    return
+                receive_task = asyncio.create_task(websocket.receive())
+            if message_task in done:
+                message = message_task.result()
+                message_task = asyncio.create_task(
+                    pubsub.get_message(
+                        ignore_subscribe_messages=True,
+                        timeout=1,
+                    )
+                )
+                if not message or message["type"] != "message":
+                    continue
+                update = JobProgressUpdate.model_validate_json(message["data"])
+                if update.updated_at < last_updated:
+                    continue
+                last_updated = update.updated_at
+                await websocket.send_text(update.model_dump_json())
                 if update.status in (JobStatus.COMPLETED, JobStatus.FAILED):
-                    break
-
+                    return
     except WebSocketDisconnect:
         pass
+    except (RedisError, OSError):
+        # Clients reconnect and use REST polling while live updates are unavailable.
+        close_code = 1013
     finally:
-        await pubsub.unsubscribe(channel_name)
-        await pubsub.aclose()
-        await redis_client.aclose()
+        tasks = [task for task in (receive_task, message_task) if task is not None]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
         try:
-            await websocket.close()
-        except RuntimeError:
-            pass
+            await pubsub.aclose()
+        finally:
+            await redis_client.aclose()
+            try:
+                await websocket.close(code=close_code)
+            except (RuntimeError, WebSocketDisconnect):
+                pass
