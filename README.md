@@ -20,7 +20,7 @@ flowchart LR
     Grafana[Grafana] -->|Query history| Prom
 ```
 
-Uploads return after the input is saved and the task is enqueued; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and the shared Docker volume holds original PDFs and rendered ZIPs.
+Uploads return after the input and durable delivery intent are saved; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and the shared Docker volume holds original PDFs and rendered ZIPs.
 
 ## Stack
 
@@ -44,14 +44,11 @@ This is a working portfolio project, with explicit reliability limits listed bel
 
 ## Run locally with Docker
 
-Requires Docker Compose, Node.js 22, and npm. From the repository root:
+Requires Docker and Docker Compose. From the repository root:
 
 ```bash
 [ -f .env ] || cp .env.example .env
 docker compose up --build -d
-cd frontend
-npm ci
-npm run dev
 ```
 
 Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8001/docs.
@@ -59,6 +56,19 @@ Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The 
 For an existing PostgreSQL volume, set `POSTGRES_PASSWORD` in `.env` to its existing password. PostgreSQL initialization variables do not change credentials in an already-initialized volume. The API uses host port 8001; its internal Docker port remains 8000.
 
 The Docker image installs Poppler (`pdfinfo` and `pdftoppm`). API and worker containers share the `job_files` volume, so uploads and results survive container restarts. API processes run as a non-root user.
+
+The frontend image builds React using Node.js and serves the result from an unprivileged Nginx container. API requests and WebSockets are proxied through the dashboard's own address. The worker and frontend wait for the API healthcheck, after startup migrations finish. Browser routes also work when opened directly or refreshed.
+
+If port 3000 is occupied, set `FRONTEND_PORT=3002` in `.env` and open http://localhost:3002. For frontend development with live reload, use Node.js 22 and run:
+
+```bash
+docker compose up --build -d api worker
+cd frontend
+npm ci
+npm run dev
+```
+
+Stop the Docker frontend with `docker compose stop frontend` before running Vite on the same port.
 
 For running the API/worker outside Docker, install `poppler-utils`, install Python dependencies, and configure the individual PostgreSQL and Redis variables in `.env` for your local services. Set `STORAGE_DIR` to the same directory for both processes.
 
@@ -158,7 +168,7 @@ Remaining work includes authentication, automatic storage cleanup, recovery afte
 
 ## Deployment status
 
-Docker Compose runs the backend and optional monitoring on one machine. The React dashboard currently runs separately through Vite. GitHub Actions validates backend code, migrations, and the frontend build; it does not publish images or perform deployment. Terraform, AWS infrastructure, Kubernetes, and automated cloud delivery are not implemented.
+Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. GitHub Actions validates backend code, migrations, and the frontend build; it does not publish images or perform deployment. Terraform, AWS infrastructure, Kubernetes, and automated cloud delivery are not implemented.
 
 Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
 

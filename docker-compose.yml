@@ -51,6 +51,12 @@ services:
       RETRY_MAX_DELAY: ${RETRY_MAX_DELAY:-60}
     volumes:
       - job_files:/app/data/jobs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      start_period: 30s
+      retries: 10
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,10 +85,21 @@ services:
       - job_files:/app/data/jobs
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+
+  # 5. Built React dashboard with same-origin API/WebSocket proxy
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "${FRONTEND_PORT:-3000}:8080"
+    depends_on:
+      api:
         condition: service_healthy
 
 volumes:
