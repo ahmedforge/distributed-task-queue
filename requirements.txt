@@ -1,4 +1,4 @@
-fastapi>=0.111.0
+fastapi>=0.111.0,<0.112.0
 uvicorn[standard]>=0.30.0
 redis>=5.0.0
 sqlmodel>=0.0.19
@@ -8,3 +8,5 @@ pydantic-settings>=2.3.0
 saq[redis]>=0.26.4
 python-multipart
 sqlalchemy[asyncio]>=2.0
+prometheus-fastapi-instrumentator>=7.1,<8
+prometheus-client>=0.23.1,<0.24

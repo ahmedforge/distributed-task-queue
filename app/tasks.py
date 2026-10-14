@@ -1,4 +1,6 @@
+import asyncio
 import logging
+from time import perf_counter
 from datetime import datetime, timezone
 from typing import Any, Dict
 
@@ -9,6 +11,7 @@ from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
 from app.schemas.job import JobProgressUpdate
 from app.pdf import render_pdf
+from app.observability import record_attempt
 
 logger = logging.getLogger("saq")
 
@@ -60,30 +63,46 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
             logger.warning(f"Job ID {job_id} not found in database.")
             return
 
-        await report_progress(session, job, 0, JobStatus.PROCESSING)
-
+        started = perf_counter()
+        outcome = "failure"
+        terminal_failure = False
         try:
+            await report_progress(session, job, 0, JobStatus.PROCESSING)
 
-            async def on_progress(progress: int):
-                await report_progress(session, job, progress, JobStatus.PROCESSING)
+            try:
 
-            await render_pdf(job_id, on_progress)
+                async def on_progress(progress: int):
+                    await report_progress(session, job, progress, JobStatus.PROCESSING)
 
-            # 3. Mark job as COMPLETED
-            job.error_message = None
-            await report_progress(session, job, 100, JobStatus.COMPLETED)
-            logger.info(f"Successfully processed Job ID {job_id}")
+                await render_pdf(job_id, on_progress)
 
-        except Exception as exc:
-            # 4. Handle failure and update database state
-            job.retry_count += 1
-            job.status = (
-                JobStatus.FAILED
-                if job.retry_count >= job.max_retries
-                else JobStatus.PENDING
+                # 3. Mark job as COMPLETED
+                job.error_message = None
+                await report_progress(session, job, 100, JobStatus.COMPLETED)
+                outcome = "success"
+                logger.info(f"Successfully processed Job ID {job_id}")
+
+            except Exception as exc:
+                # 4. Handle failure and update database state
+                job.retry_count += 1
+                job.status = (
+                    JobStatus.FAILED
+                    if job.retry_count >= job.max_retries
+                    else JobStatus.PENDING
+                )
+
+                job.error_message = str(exc)
+                await report_progress(session, job, job.progress, job.status)
+                terminal_failure = job.status == JobStatus.FAILED
+                logger.error(f"Failed processing Job ID {job_id}: {exc}")
+                raise exc
+
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            await record_attempt(
+                outcome,
+                max(0, perf_counter() - started),
+                terminal_failure,
             )
-
-            job.error_message = str(exc)
-            await report_progress(session, job, job.progress, job.status)
-            logger.error(f"Failed processing Job ID {job_id}: {exc}")
-            raise exc
