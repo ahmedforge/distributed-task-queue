@@ -1,13 +1,6 @@
 # DistribuQueue — Distributed PDF Task Queue
 
-Upload a PDF, render its pages into PNG images in a background worker, and download the images as a ZIP archive. FastAPI and React provide submission, progress, job status, failed-job requeueing, downloads, and terminal-job deletion. PostgreSQL stores job state; Redis-backed SAQ executes tasks and Redis Pub/Sub delivers WebSocket progress events.
-
-![DistribuQueue dashboard](docs/demo/01-dashboard-active-viewport.png)
-
-[60-second screenshot walkthrough](docs/demo/walkthrough.mp4) · [GIF preview](docs/demo/preview.gif) · [Screenshots](docs/demo/README.md) · [Benchmark evidence](docs/benchmarks/README.md) · [Resume and interview notes](docs/portfolio.md)
-
-**Local v1 is feature-complete.** Latest backend validation: 76 passing tests. One controlled run completed 40 synthetic two-page PDFs in 21.78 seconds and recovered four interrupted jobs after a worker SIGKILL. See the workload and timeout qualifications in the benchmark report.
-
+Upload PDFs, render pages in background workers, track live progress, and download the results as ZIPs. Built with FastAPI, PostgreSQL, Redis-backed SAQ, and React.
 
 ## Architecture
 
@@ -28,6 +21,43 @@ flowchart LR
 ```
 
 Uploads return after the input and durable delivery intent are saved; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and the shared Docker volume holds original PDFs and rendered ZIPs.
+
+## One-command setup
+
+Requires Docker with Docker Compose. From a fresh checkout, start the full app and monitoring:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d
+```
+
+Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: http://localhost:3001 (initially `admin` / `admin`). Defaults work without an `.env` file; existing PostgreSQL volumes require their existing password. Port conflicts and development setup are covered [below](#run-locally-with-docker).
+
+## Benchmark results and limits
+
+| Recorded local check | Result |
+| --- | --- |
+| Load | 40 synthetic two-page PDFs in **21.78 seconds — 1.84 jobs/second** |
+| Output validation | 40/40 ZIPs passed integrity, page-count, and PNG-signature checks |
+| Worker SIGKILL | 4/4 interrupted ten-page jobs recovered with valid ZIPs in **88.17 seconds** |
+
+**Conditions:** one worker limited to **2 CPUs / 1 GiB**, concurrency 10, and eight concurrent upload requests. These were simple generated PDFs in one finite batch on a shared laptop, not sustained production capacity. The crash test retained Redis, PostgreSQL, and storage and used a **30-second task timeout**; the application default is **1800 seconds**. It does not establish exactly-once execution or guaranteed zero job loss.
+
+[Full methodology and reproduction](docs/benchmarks/README.md) · [Raw measurements](docs/benchmarks/latest.json)
+
+## Design decisions
+
+- **PostgreSQL owns job state and delivery intent.** A dispatch marker is committed with the job; the API retries Redis delivery after a crash or temporary outage. The shared SAQ key suppresses incomplete duplicate deliveries, without claiming a transaction spanning PostgreSQL and Redis.
+- **Use database constraints and row locks for concurrency.** `ON CONFLICT` resolves simultaneous uploads using one idempotency key; row locks serialize requeue, worker receipt, and deletion claims.
+- **Persist progress before publishing it.** Redis Pub/Sub and WebSockets provide live updates; reconnect and REST polling recover missed notifications. Pub/Sub is not a durable event log.
+- **Keep v1 on one Docker host.** API and workers share a file volume, with SAQ supplying retries/backoff and Prometheus/Grafana supplying monitoring. Multiple hosts need shared/object storage; cloud/Kubernetes deployment is deferred to v2.
+
+## Demo
+
+![DistribuQueue dashboard](docs/demo/01-dashboard-active-viewport.png)
+
+[60-second screenshot walkthrough](docs/demo/walkthrough.mp4) · [GIF preview](docs/demo/preview.gif) · [Screenshots](docs/demo/README.md) · [Resume and interview notes](docs/portfolio.md)
+
+**Local v1 is feature-complete.** Latest backend validation: 76 passing tests. The sections below document operation and known limits.
 
 ## Stack
 
@@ -181,12 +211,6 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
 Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment is implemented. Recorded local load/crash measurements are linked below.
-
-## Measured local validation
-
-In one controlled local run, a worker limited to 2 CPUs and 1 GiB completed **40 synthetic two-page PDFs in 21.78 seconds (1.84 jobs/second)**. All 40 ZIPs passed integrity, page-count, and PNG-signature checks. A separate real worker SIGKILL interrupted four ten-page jobs; all four recovered and produced valid ZIPs in 88.17 seconds with Redis/storage preserved and a benchmark-only 30-second task timeout. The normal application timeout is 1800 seconds.
-
-These are finite-batch results for simple generated PDFs, not sustained capacity or a zero-loss guarantee. See the [benchmark report and reproduction instructions](docs/benchmarks/README.md) and [raw observations](docs/benchmarks/latest.json).
 
 ## v1 finish line
 
