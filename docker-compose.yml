@@ -68,7 +68,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: dtq_worker
     command: saq app.worker.settings --verbose
     environment:
       POSTGRES_SERVER: postgres
@@ -79,6 +78,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       STORAGE_DIR: /app/data/jobs
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
       RETRY_BASE_DELAY: ${RETRY_BASE_DELAY:-2}
       RETRY_MAX_DELAY: ${RETRY_MAX_DELAY:-60}
     volumes:

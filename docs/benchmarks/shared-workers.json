@@ -1,0 +1,193 @@
+{
+  "started_at_utc": "2026-10-18T10:15:46.662222+00:00",
+  "environment": {
+    "source_commit": "26fda5bd5f6ba3c2808f258ecfbc8ad80b129d21",
+    "app_source_sha256": "71412e8f96a0f5bd9062d11b1be9c8d97bc3e6375fd3406940e603f5f48b24c1",
+    "image_id": "sha256:3a6a5f137f80adcd28b9e12569504557302889634d863aedb2cc55cd311f8b11",
+    "platform": "Linux-7.0.0-34-generic-x86_64-with-glibc2.39",
+    "cpu_model": "11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",
+    "host_logical_cpus": 8,
+    "host_memory_kib": 7899508,
+    "docker_version": "29.7.2",
+    "limits": {
+      "each_worker": "1 CPU / 1 GiB",
+      "minio": "1 CPU / 1 GiB",
+      "api": "1 CPU / 512 MiB",
+      "postgres": "1 CPU / 512 MiB",
+      "redis": "0.5 CPU / 128 MiB"
+    },
+    "worker_concurrency": 1,
+    "upload_concurrency": 4,
+    "other_host_services": "Existing user services remained running; this is not a dedicated benchmark host.",
+    "storage_backend": "MinIO / S3",
+    "api_worker_shared_mounts": false,
+    "workers": 2,
+    "minio_image_id": "sha256:c48ffe27843d5cae6a8af1e42fc528f0e74ad93717bc02d73979fc1ee0bd6ba8"
+  },
+  "warmup": {
+    "jobs": 3,
+    "pages_per_pdf": 2,
+    "input_bytes": 760,
+    "duration_seconds": 4.4002,
+    "completed_jobs_per_second": 0.6818,
+    "completed": 3,
+    "failed": 0,
+    "verified_zip_archives": 3,
+    "submission_latency_seconds": {
+      "p50": 1.3097,
+      "p95": 1.3193,
+      "max": 1.3204
+    },
+    "observed_end_to_end_seconds": {
+      "p50": 3.8741,
+      "p95": 4.3455,
+      "max": 4.3979
+    },
+    "jobs_detail": {
+      "1": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 3.0874
+      },
+      "3": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 4.3979
+      },
+      "2": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 3.8741
+      }
+    }
+  },
+  "load": {
+    "jobs": 12,
+    "pages_per_pdf": 2,
+    "input_bytes": 760,
+    "duration_seconds": 7.3667,
+    "completed_jobs_per_second": 1.629,
+    "completed": 12,
+    "failed": 0,
+    "verified_zip_archives": 12,
+    "submission_latency_seconds": {
+      "p50": 0.9584,
+      "p95": 1.2021,
+      "max": 1.2027
+    },
+    "observed_end_to_end_seconds": {
+      "p50": 4.2558,
+      "p95": 5.5763,
+      "max": 5.6142
+    },
+    "jobs_detail": {
+      "4": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 2.3226
+      },
+      "6": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 2.3239
+      },
+      "7": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 3.7249
+      },
+      "5": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 3.464
+      },
+      "8": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 3.9037
+      },
+      "10": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 3.8022
+      },
+      "9": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 4.6112
+      },
+      "11": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 4.6079
+      },
+      "12": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 5.0413
+      },
+      "13": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 4.7863
+      },
+      "14": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 5.6142
+      },
+      "15": {
+        "status": "COMPLETED",
+        "retry_count": 0,
+        "observed_latency_seconds": 5.5454
+      }
+    },
+    "completed_by_worker": {
+      "worker_a": [
+        4,
+        5,
+        8,
+        9,
+        12,
+        14
+      ],
+      "worker_b": [
+        6,
+        7,
+        10,
+        11,
+        13,
+        15
+      ]
+    }
+  },
+  "crash": {
+    "accepted_jobs": 4,
+    "pages_per_pdf": 50,
+    "signal": "SIGKILL",
+    "worker_exit_code": 137,
+    "killed_worker_removed": true,
+    "recovered_by": "worker_b_only",
+    "interrupted_job_ids": [
+      16
+    ],
+    "completed_jobs": 4,
+    "verified_zip_archives": 4,
+    "failed_jobs": 0,
+    "unaccounted_jobs": 0,
+    "recovery_to_all_completed_seconds": 83.1998,
+    "test_task_timeout_seconds": 30,
+    "application_default_timeout_seconds": 1800,
+    "sweep_interval_seconds": 60,
+    "queue_data_retained": true,
+    "object_storage_retained": true,
+    "retry_counts": {
+      "16": 1,
+      "19": 0,
+      "17": 0,
+      "18": 0
+    }
+  },
+  "passed": true,
+  "finished_at_utc": "2026-10-18T10:17:48.855449+00:00"
+}

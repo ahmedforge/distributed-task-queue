@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     RETRY_BASE_DELAY: float = Field(default=2.0, gt=0)
     RETRY_MAX_DELAY: float = Field(default=60.0, gt=0)
+    WORKER_CONCURRENCY: int = Field(default=10, ge=1, le=100)
     STORAGE_BACKEND: Literal["local", "s3"] = "local"
     S3_ENDPOINT_URL: str | None = None
     S3_BUCKET: str = "dtq-jobs"

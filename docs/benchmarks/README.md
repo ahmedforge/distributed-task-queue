@@ -48,3 +48,7 @@ The script builds the current app, generates its own PDFs, and creates container
 > Built a Dockerized PDF task queue with durable dispatch, idempotent submissions, retry recovery, and live progress; measured 40 two-page jobs in 21.78 seconds on a worker limited to two CPUs, and recovered all four interrupted jobs in a controlled worker SIGKILL test.
 
 Use the workload qualifiers when presenting these numbers. Do not describe this as a sustained service limit or a guarantee of zero job loss.
+
+## v2: shared-storage workers
+
+See the [separate two-worker and survivor-only crash experiment](shared-workers.md). Its workload and concurrency differ from this v1 run; the rates are not a controlled scaling comparison.

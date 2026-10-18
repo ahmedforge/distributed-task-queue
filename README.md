@@ -234,3 +234,5 @@ Use the [portfolio notes](docs/portfolio.md) for concise resume bullets, the ide
 
 MinIO-backed uploads and results are available through an optional Compose overlay.
 See [shared storage setup and limits](docs/shared-storage.md) before switching any existing demo.
+
+A [two-worker shared-storage verification](docs/benchmarks/shared-workers.md) checks independent worker participation and survivor-only recovery after SIGKILL.

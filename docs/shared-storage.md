@@ -48,7 +48,8 @@ Do not change storage backend/bucket while jobs exist. Versioned buckets need
 additional version cleanup; this implementation deletes current objects only.
 A successful object PUT followed by a database rollback/crash can leave an orphan
 object (there is no transaction spanning PostgreSQL and S3). Orphan reconciliation,
-retention, multi-worker crash benchmarks and Kubernetes remain follow-up work.
+retention and Kubernetes remain follow-up work. A reproducible
+[multi-worker crash check](benchmarks/shared-workers.md) is provided separately.
 Single PUTs avoid abandoned multipart uploads; artifacts must fit S3's single-PUT
 size limit. API downloads use local disk space proportional to the ZIP size.
 
