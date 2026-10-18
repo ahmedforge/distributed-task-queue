@@ -216,7 +216,7 @@ Remaining work includes authentication, age-based storage retention, recovery af
 
 This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The feature scope is frozen; remaining publication is committing and pushing the final documentation/media. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
 
-Cloud deployment, Kubernetes/KEDA autoscaling, object storage, full authentication, and age-based retention are v2. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
+Cloud deployment, Kubernetes/KEDA autoscaling, full authentication, and age-based retention remain future v2 work. The first v2 change adds opt-in object storage; see the setup and migration limits below. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
 
 ## Deployment status
 
@@ -229,3 +229,8 @@ Multiple workers can share the volume on one Docker host. A multi-host deploymen
 The [demo asset index](docs/demo/README.md) contains actual screenshots of submission, live processing, completion, failed-job management, and Grafana. The [60-second walkthrough](docs/demo/walkthrough.mp4) is an edited screenshot sequence with synthetic inputs. A real browser upload completed and its downloaded ZIP was verified to contain 30 PNG pages.
 
 Use the [portfolio notes](docs/portfolio.md) for concise resume bullets, the idempotency-race story, and explanations of durable dispatch, worker recovery, deletion, and their limits.
+
+## v2 shared storage (opt-in)
+
+MinIO-backed uploads and results are available through an optional Compose overlay.
+See [shared storage setup and limits](docs/shared-storage.md) before switching any existing demo.

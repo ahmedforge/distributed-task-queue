@@ -17,7 +17,7 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       POSTGRES_SERVER: 127.0.0.1
       POSTGRES_PORT: '5433'
@@ -26,6 +26,7 @@ jobs:
       POSTGRES_DB: task_queue
       REDIS_HOST: 127.0.0.1
       REDIS_PORT: '6379'
+      DTQ_TEST_S3_ENDPOINT: http://127.0.0.1:19000
     services:
       postgres:
         image: postgres:16-alpine
@@ -76,6 +77,16 @@ jobs:
         env:
           POSTGRES_DB: task_queue_migrations
         run: poetry run python scripts/check_migrations.py
+      - name: Start MinIO for shared storage integration tests
+        run: |
+          docker build -f docker/minio.Dockerfile -t dtq-minio:test .
+          docker run -d --name dtq-test-minio -p 127.0.0.1:19000:9000 -e MINIO_ROOT_USER=dtq-test -e MINIO_ROOT_PASSWORD=dtq-test-password dtq-minio:test server /data
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:19000/minio/health/live; then exit 0; fi
+            sleep 1
+          done
+          docker logs dtq-test-minio
+          exit 1
       - name: Run backend tests
         run: poetry run pytest -q
 

@@ -2,24 +2,17 @@
 
 import asyncio
 import logging
-import shutil
 from sqlmodel import select
 
 from app.core.database import async_session_maker
-from app.core.storage import job_directory
+from app.core.storage import get_storage
 from app.models.job import Job, JobStatus
 
 logger = logging.getLogger(__name__)
 
 
 def remove_job_files(job_id):
-    directory = job_directory(job_id)
-    try:
-        shutil.rmtree(directory)
-    except FileNotFoundError:
-        if directory.exists():
-            raise  # Partial cleanup needs another pass.
-        # Missing directories are already cleaned up.
+    get_storage().delete_job(job_id)
 
 
 async def cleanup_job(job_id):

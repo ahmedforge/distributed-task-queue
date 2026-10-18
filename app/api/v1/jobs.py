@@ -14,6 +14,7 @@ from fastapi import (
     Query,
 )
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.background import BackgroundTask
 from app.deletion import cleanup_job
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
@@ -28,7 +29,7 @@ import redis.asyncio as aioredis
 from fastapi import WebSocket, WebSocketDisconnect
 from redis.exceptions import RedisError
 from app.core.config import settings
-from app.core.storage import input_path, result_path, job_directory
+from app.core.storage import get_storage
 
 
 router = APIRouter()
@@ -91,11 +92,9 @@ async def upload_job(
                 )
             return existing
 
-    root = Path(settings.STORAGE_DIR).resolve()
-    root.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(dir=root, delete=False) as output:
+        with tempfile.NamedTemporaryFile(delete=False) as output:
             temporary = Path(output.name)
             size = 0
             first = True
@@ -142,8 +141,13 @@ async def upload_job(
                 )
             return existing
         job = await session.get(Job, inserted_id)
-        job_directory(job.id).mkdir(parents=True, exist_ok=True)
-        temporary.replace(input_path(job.id))
+        try:
+            await asyncio.to_thread(get_storage().put, job.id, "input.pdf", temporary)
+        except Exception:
+            await session.rollback()
+            raise HTTPException(
+                503, "Upload storage is temporarily unavailable. Retry the upload."
+            )
         await session.commit()
         await session.refresh(job)
         await dispatch_job(job.id, queue)
@@ -161,11 +165,21 @@ async def download_result(job_id: int, session: AsyncSession = Depends(get_sessi
         raise HTTPException(404, "Job not found")
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(409, "The job has not completed.")
-    result = result_path(job_id)
-    if not result.is_file():
+    with tempfile.NamedTemporaryFile(delete=False) as output:
+        result = Path(output.name)
+    try:
+        await asyncio.to_thread(get_storage().fetch, job_id, "pages.zip", result)
+    except FileNotFoundError:
+        result.unlink(missing_ok=True)
         raise HTTPException(404, "The rendered result is unavailable.")
+    except Exception:
+        result.unlink(missing_ok=True)
+        raise HTTPException(503, "Result storage is temporarily unavailable.")
     return FileResponse(
-        result, media_type="application/zip", filename=f"job-{job_id}-pages.zip"
+        result,
+        media_type="application/zip",
+        filename=f"job-{job_id}-pages.zip",
+        background=BackgroundTask(result.unlink, missing_ok=True),
     )
 
 

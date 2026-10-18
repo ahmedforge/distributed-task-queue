@@ -8,7 +8,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from app.core.config import settings
-from app.core.storage import input_path, job_directory, result_path
+from app.core.storage import get_storage
 
 
 async def run_poppler(*args: str) -> bytes:
@@ -39,8 +39,17 @@ def write_archive(directory: Path, destination: Path) -> None:
 
 
 async def render_pdf(job_id: int, on_progress) -> None:
-    source = input_path(job_id)
-    if not source.is_file():
+    # Scratch is private to this attempt; no shared worker filesystem is needed.
+    with tempfile.TemporaryDirectory(prefix=f"dtq-{job_id}-") as scratch:
+        await _render_pdf(job_id, on_progress, Path(scratch))
+
+
+async def _render_pdf(job_id: int, on_progress, directory: Path) -> None:
+    storage = get_storage()
+    source = directory / "input.pdf"
+    try:
+        await asyncio.to_thread(storage.fetch, job_id, "input.pdf", source)
+    except FileNotFoundError:
         raise ValueError(
             "PDF input is missing. Submit a file through the upload endpoint."
         )
@@ -56,24 +65,22 @@ async def render_pdf(job_id: int, on_progress) -> None:
 
     await on_progress(10)
     # Fresh temporary outputs prevent retries from including stale pages.
-    with tempfile.TemporaryDirectory(dir=job_directory(job_id)) as scratch:
-        directory = Path(scratch)
-        for page in range(1, pages + 1):
-            prefix = directory / f"page-{page:04d}"
-            await run_poppler(
-                "pdftoppm",
-                "-f",
-                str(page),
-                "-l",
-                str(page),
-                "-singlefile",
-                "-scale-to",
-                "1600",
-                "-png",
-                str(source),
-                str(prefix),
-            )
-            await on_progress(10 + int(80 * page / pages))
-        archive = directory / "pages.zip"
-        await asyncio.to_thread(write_archive, directory, archive)
-        archive.replace(result_path(job_id))
+    for page in range(1, pages + 1):
+        prefix = directory / f"page-{page:04d}"
+        await run_poppler(
+            "pdftoppm",
+            "-f",
+            str(page),
+            "-l",
+            str(page),
+            "-singlefile",
+            "-scale-to",
+            "1600",
+            "-png",
+            str(source),
+            str(prefix),
+        )
+        await on_progress(10 + int(80 * page / pages))
+    archive = directory / "pages.zip"
+    await asyncio.to_thread(write_archive, directory, archive)
+    await asyncio.to_thread(storage.put, job_id, "pages.zip", archive)

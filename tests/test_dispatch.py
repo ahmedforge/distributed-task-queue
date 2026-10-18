@@ -130,7 +130,15 @@ async def test_api_startup_recovers_committed_delivery_marker(monkeypatch):
     try:
         async with app.router.lifespan_context(app):
             async with asyncio.timeout(5):
-                while await test_queue.job(key) is None:
+                # Redis enqueue precedes the PostgreSQL commit. Keep the
+                # dispatcher alive until both sides finish, or shutdown can
+                # cancel the commit and make this test timing-dependent.
+                while True:
+                    async with async_session_maker() as session:
+                        saved = await session.get(Job, job_id)
+                        committed = not saved.dispatch_pending
+                    if committed and await test_queue.job(key) is not None:
+                        break
                     await asyncio.sleep(0.05)
         async with async_session_maker() as session:
             assert not (await session.get(Job, job_id)).dispatch_pending
