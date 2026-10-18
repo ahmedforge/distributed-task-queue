@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bootstrap
+spec:
+  backoffLimit: 5
+  activeDeadlineSeconds: 300
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      containers:
+      - name: bootstrap
+        image: dtq-app:k8s
+        imagePullPolicy: IfNotPresent
+        command:
+        - sh
+        - -c
+        - alembic upgrade head && python -c "from app.core.storage import initialize_bucket;
+          initialize_bucket()"
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: demo-secrets
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi

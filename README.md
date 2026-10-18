@@ -9,18 +9,20 @@ flowchart LR
     UI[React dashboard] -->|Upload, status, download| API[FastAPI API]
     API -->|Persist job state| DB[(PostgreSQL)]
     API -->|Enqueue task| Redis[(Redis / SAQ)]
-    Redis -->|Dispatch and retry| Worker[PDF worker / Poppler]
+    Redis -->|Dispatch and retry| Worker[PDF workers / Poppler]
     Worker -->|Progress and outcome| DB
-    API --> Files[(Shared PDF and ZIP storage)]
+    API --> Files[(Local volume or MinIO)]
     Worker --> Files
     Worker -->|Progress events and metrics| Redis
     Redis -->|Pub/Sub| API
     API -->|WebSocket progress| UI
-    Prom[Prometheus] -->|Scrape /metrics| API
-    Grafana[Grafana] -->|Query history| Prom
+    Prom[Prometheus - Compose] -->|Scrape /metrics| API
+    Grafana[Grafana - Compose] -->|Query history| Prom
+    KEDA[KEDA - optional Kubernetes] -.->|Ready queue length| Redis
+    KEDA -.->|1 to 3 replicas| Worker
 ```
 
-Uploads return after the input and durable delivery intent are saved; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and the shared Docker volume holds original PDFs and rendered ZIPs.
+Uploads return after the input and durable delivery intent are saved; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and original PDFs and ZIPs use local storage by default or MinIO in the opt-in shared-storage setup. The local Kubernetes deployment uses MinIO and KEDA; its setup and limits are [documented separately](docs/kubernetes.md).
 
 ## One-command setup
 
@@ -49,7 +51,8 @@ Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: h
 - **PostgreSQL owns job state and delivery intent.** A dispatch marker is committed with the job; the API retries Redis delivery after a crash or temporary outage. The shared SAQ key suppresses incomplete duplicate deliveries, without claiming a transaction spanning PostgreSQL and Redis.
 - **Use database constraints and row locks for concurrency.** `ON CONFLICT` resolves simultaneous uploads using one idempotency key; row locks serialize requeue, worker receipt, and deletion claims.
 - **Persist progress before publishing it.** Redis Pub/Sub and WebSockets provide live updates; reconnect and REST polling recover missed notifications. Pub/Sub is not a durable event log.
-- **Keep v1 on one Docker host.** API and workers share a file volume, with SAQ supplying retries/backoff and Prometheus/Grafana supplying monitoring. Multiple hosts need shared/object storage; cloud/Kubernetes deployment is deferred to v2.
+- **Separate persistent artifacts from worker scratch.** MinIO lets independent workers exchange PDFs and ZIPs without a shared local filesystem. The default Compose setup still supports local storage.
+- **Keep one worker for SAQ housekeeping.** KEDA scales the local Kubernetes demo from 1 to 3 workers on ready queue depth; the baseline worker handles delayed retries and sweeping, which are absent from the ready list.
 
 ## Demo
 
@@ -57,7 +60,7 @@ Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: h
 
 [60-second screenshot walkthrough](docs/demo/walkthrough.mp4) · [GIF preview](docs/demo/preview.gif) · [Screenshots](docs/demo/README.md) · [Resume and interview notes](docs/portfolio.md)
 
-**Local v1 is feature-complete.** Latest backend validation: 76 passing tests. The sections below document operation and known limits.
+**Local v1 and the bounded local v2 scope are complete.** Latest backend validation: 80 passing tests, including real MinIO integration. The sections below document operation and known limits.
 
 ## Stack
 
@@ -67,7 +70,7 @@ Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: h
 | Background processing | Redis, SAQ, Poppler |
 | Dashboard | React, TypeScript, Vite, TanStack Query, Tailwind CSS, Recharts |
 | Monitoring | Prometheus, Grafana |
-| Delivery and verification | Docker Compose, GitHub Actions, pytest, Black, Oxlint |
+| Delivery and verification | Docker Compose, local Kubernetes/kind, KEDA, GitHub Actions, pytest, Black, Oxlint |
 
 ## What this demonstrates
 
@@ -210,17 +213,17 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included; no Kubernetes deployment is implemented. Recorded local load/crash measurements are linked below.
+Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included in Compose. The optional local Kubernetes/KEDA setup uses MinIO; it does not include the monitoring stack or establish multi-node availability.
 
 ## v1 finish line
 
-This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The feature scope is frozen; remaining publication is committing and pushing the final documentation/media. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
+This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The v1 feature scope is complete; v2 adds shared object storage, independent-worker recovery verification, and a local Kubernetes/KEDA demo. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
 
-Cloud deployment, Kubernetes/KEDA autoscaling, full authentication, and age-based retention remain future v2 work. The first v2 change adds opt-in object storage; see the setup and migration limits below. They are not prerequisites for completing this release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
+Cloud deployment, full authentication, and age-based retention remain outside the bounded local v2 scope. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
 
 ## Deployment status
 
-Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. GitHub Actions validates backend code, migrations, and the frontend build; it does not publish images or perform deployment. Terraform, AWS infrastructure, Kubernetes, and automated cloud delivery are not implemented.
+Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. GitHub Actions validates backend code, migrations, and the frontend build; it does not publish images or perform deployment. The optional [local Kubernetes/KEDA deployment](docs/kubernetes.md) is provided separately. Terraform, AWS infrastructure and automated cloud delivery are not implemented.
 
 Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
 
@@ -236,3 +239,9 @@ MinIO-backed uploads and results are available through an optional Compose overl
 See [shared storage setup and limits](docs/shared-storage.md) before switching any existing demo.
 
 A [two-worker shared-storage verification](docs/benchmarks/shared-workers.md) checks independent worker participation and survivor-only recovery after SIGKILL.
+
+## Local Kubernetes and KEDA
+
+[Setup, scaling behavior, verification and cleanup](docs/kubernetes.md). This optional single-node demo scales worker pods on the actual SAQ Redis list. It keeps one worker for delayed retries and interruption recovery and uses MinIO for persistent artifacts.
+
+Recorded local verification: **1 → 3 → 1 workers**, **16/16 twenty-page PDFs completed**, all 16 ZIPs validated, and the frontend WebSocket proxy checked. This ran on one kind node; it is not a multi-host or sustained-capacity claim. [Results and limits](docs/kubernetes.md#recorded-verification) · [Raw observations](docs/benchmarks/keda.json).

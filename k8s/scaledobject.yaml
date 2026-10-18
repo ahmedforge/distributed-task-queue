@@ -1,0 +1,24 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-queue
+spec:
+  scaleTargetRef:
+    name: worker
+  minReplicaCount: 1
+  maxReplicaCount: 3
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+        scaleUp:
+          stabilizationWindowSeconds: 0
+  triggers:
+  - type: redis
+    metadata:
+      address: redis.dtq.svc.cluster.local:6379
+      listName: saq:tasks:queued
+      listLength: '2'
+      activationListLength: '0'
+      databaseIndex: '0'

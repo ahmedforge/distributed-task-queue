@@ -11,3 +11,6 @@ venv/
 .idea/
 pgdata/
 data/
+
+# Local kind kubeconfig and generated files
+.local-k8s/

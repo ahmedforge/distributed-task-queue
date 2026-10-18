@@ -1,4 +1,4 @@
-# Local v1 load and worker-crash measurements
+# Local load, recovery, and scaling measurements
 
 Recorded October 15, 2026 (Asia/Karachi). This is one finite synthetic workload, not a production capacity or availability guarantee. [Raw measurements](latest.json) include the tested commit, app-source hash, Docker image ID, and individual job observations.
 
@@ -52,3 +52,7 @@ Use the workload qualifiers when presenting these numbers. Do not describe this 
 ## v2: shared-storage workers
 
 See the [separate two-worker and survivor-only crash experiment](shared-workers.md). Its workload and concurrency differ from this v1 run; the rates are not a controlled scaling comparison.
+
+## v2: local Kubernetes autoscaling
+
+The [Kubernetes verification report](../kubernetes.md#recorded-verification) and [raw observations](keda.json) record real PDF processing and KEDA scale-up/scale-down. This is a single-node correctness experiment, not a throughput comparison with the v1 or two-worker workloads.

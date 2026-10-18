@@ -1,0 +1,430 @@
+{
+  "started_at_utc": "2026-10-18T17:42:56.833348+00:00",
+  "jobs": 16,
+  "pages_per_pdf": 20,
+  "samples": [
+    {
+      "elapsed_seconds": 0.29,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 3.64,
+      "queued": 11,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 6.92,
+      "queued": 14,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 11.33,
+      "queued": 13,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 15.76,
+      "queued": 12,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 21.66,
+      "queued": 10,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 27.47,
+      "queued": 9,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 33.44,
+      "queued": 7,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 39.46,
+      "queued": 6,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 45.25,
+      "queued": 4,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 51.33,
+      "queued": 2,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 57.64,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 63.25,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 70.74,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 74.86,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 79.2,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 83.55,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 87.55,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 91.56,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 95.58,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 99.64,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 103.84,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 108.03,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 112.01,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 116.02,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 119.94,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 124.14,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 128.29,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 132.6,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 136.94,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 141.32,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 145.73,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 149.92,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 154.26,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 158.45,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 162.93,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 167.58,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 171.85,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 176.06,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 180.29,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 184.57,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 188.93,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 193.07,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 197.13,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 201.11,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    }
+  ],
+  "limits": "Single kind node on a shared laptop; not production capacity or multi-node HA.",
+  "kubernetes_versions": [
+    "v1.35.8"
+  ],
+  "scaledobject_spec": {
+    "advanced": {
+      "horizontalPodAutoscalerConfig": {
+        "behavior": {
+          "scaleDown": {
+            "stabilizationWindowSeconds": 120
+          },
+          "scaleUp": {
+            "stabilizationWindowSeconds": 0
+          }
+        }
+      },
+      "scalingModifiers": {}
+    },
+    "maxReplicaCount": 3,
+    "minReplicaCount": 1,
+    "scaleTargetRef": {
+      "name": "worker"
+    },
+    "triggers": [
+      {
+        "metadata": {
+          "activationListLength": "0",
+          "address": "redis.dtq.svc.cluster.local:6379",
+          "databaseIndex": "0",
+          "listLength": "2",
+          "listName": "saq:tasks:queued"
+        },
+        "type": "redis"
+      }
+    ]
+  },
+  "initial_runtime_worker_containers": 1,
+  "websocket_snapshot_verified": true,
+  "all_completed_seconds": 67.48,
+  "final_runtime_worker_containers": 1,
+  "passed": true,
+  "job_ids": [
+    34,
+    36,
+    35,
+    33,
+    37,
+    39,
+    38,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    47,
+    46,
+    48
+  ],
+  "verified_zip_archives": 16,
+  "peak_ready_workers": 3,
+  "returned_to_one_worker": true,
+  "finished_at_utc": "2026-10-18T17:46:19.519432+00:00"
+}

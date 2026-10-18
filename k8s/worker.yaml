@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: worker
+        image: dtq-app:k8s
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        command:
+        - saq
+        - app.worker.settings
+        - --verbose
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: demo-secrets
+      terminationGracePeriodSeconds: 1860
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001

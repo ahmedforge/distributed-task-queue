@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     RETRY_BASE_DELAY: float = Field(default=2.0, gt=0)
     RETRY_MAX_DELAY: float = Field(default=60.0, gt=0)
     WORKER_CONCURRENCY: int = Field(default=10, ge=1, le=100)
+    WORKER_SHUTDOWN_GRACE_SECONDS: int = Field(default=0, ge=0, le=1800)
     STORAGE_BACKEND: Literal["local", "s3"] = "local"
     S3_ENDPOINT_URL: str | None = None
     S3_BUCKET: str = "dtq-jobs"

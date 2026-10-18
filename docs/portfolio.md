@@ -5,8 +5,10 @@
 Pick two or three, retaining the workload qualifiers on measured results:
 
 - Built a Dockerized PDF processing system with FastAPI, PostgreSQL, Redis-backed SAQ, and React, providing live WebSocket progress, ZIP downloads, failed-job management, and Prometheus/Grafana monitoring.
-- Implemented database-enforced concurrent-upload idempotency, durable dispatch intent, bounded retries with jitter, worker-state reconciliation, and retryable file deletion; validated backend behavior with 76 tests and GitHub Actions checks.
+- Implemented database-enforced concurrent-upload idempotency, durable dispatch intent, bounded retries with jitter, worker-state reconciliation, and retryable file deletion; validated backend behavior with 80 tests and GitHub Actions checks.
 - Measured 40 synthetic two-page PDFs in 21.78 seconds (1.84 jobs/sec) on a worker limited to two CPUs; recovered all four interrupted jobs in a controlled SIGKILL test with a 30-second task timeout and Redis/storage retained.
+
+- Added MinIO-backed shared storage and KEDA queue-driven autoscaling; verified 1 → 3 → 1 worker pods on a single-node Kubernetes demo while processing 16 synthetic twenty-page PDFs and validating all 320 output pages as PNG files.
 
 Short project description:
 
@@ -57,13 +59,14 @@ Only completed and failed jobs can be deleted. Deletion and requeue use the same
 
 ## Evidence and limits
 
+- [Local Kubernetes scaling evidence](kubernetes.md#recorded-verification) and [shared-worker crash evidence](benchmarks/shared-workers.md) cover the bounded local v2 scope.
 - [Recorded load and crash report](benchmarks/README.md), [raw observations](benchmarks/latest.json), and `scripts/benchmark.py` support the numeric claims.
 - One finite batch of simple generated PDFs is not a sustained service-capacity benchmark.
 - The crash check retained PostgreSQL, Redis, and shared storage; it did not test a full-host failure or Redis data loss.
-- The local shared volume does not support independent machines without shared/object storage.
+- Default local storage is limited to one shared Docker host. The optional MinIO backend lets workers use independent filesystems; the verified Kubernetes demo still runs on one physical host.
 - The app is a local portfolio demo, with no authentication, owner isolation, public-service rate limiting, or age-based retention policy.
-- Terraform, cloud rollout, Kubernetes/KEDA, and object storage are deferred to v2. No AWS deployment or autoscaling claim is made.
+- Shared object storage, two-worker crash recovery, and local Kubernetes/KEDA scaling are implemented in v2. Terraform, cloud rollout, and multi-node availability remain outside scope. No AWS deployment is claimed.
 
 ## v1 completion record
 
-The agreed local v1 scope is complete: application flows, CI checks, monitoring, idempotency race coverage, recorded load/SIGKILL measurements, screenshots, a short walkthrough, and evidence-backed presentation material. Final documentation/media still need to be committed and pushed by the project owner. Future features belong in v2 rather than extending this finish line.
+The agreed local v1 scope is complete: application flows, CI checks, monitoring, idempotency race coverage, recorded load/SIGKILL measurements, screenshots, a short walkthrough, and evidence-backed presentation material. Commit and push actions remain with the project owner. The bounded local v2 adds shared storage, independent-worker recovery, and Kubernetes queue-driven scaling; further infrastructure features require a separate scope.
