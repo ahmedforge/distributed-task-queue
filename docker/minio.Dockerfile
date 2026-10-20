@@ -1,7 +1,8 @@
 # MinIO community images were removed. Build the pinned AGPL-3.0 source release.
 FROM golang:1.24.8-alpine AS builder
 RUN apk add --no-cache git
-ENV CGO_ENABLED=0 GOMAXPROCS=2 GOFLAGS=-p=2
+# Avoid stalled HTTP/2 module downloads on local/proxied networks.
+ENV CGO_ENABLED=0 GOMAXPROCS=2 GOFLAGS=-p=2 GODEBUG=http2client=0
 RUN go install github.com/minio/minio@RELEASE.2025-10-15T17-29-55Z
 
 FROM alpine:3.22
