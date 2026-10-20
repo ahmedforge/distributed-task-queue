@@ -133,3 +133,7 @@ shutdown grace.
 
 This removes only the `dtq-v2` cluster and its local PVC data. It does not remove
 the Compose demo or its volumes. Save evidence before cleanup.
+
+## Terraform alternative
+
+The [two-stage Terraform setup](../terraform/README.md) creates a separate local `dtq-tf` cluster and deploys these same manifests through Helm. Use that lifecycle instead of the manual helper for its cluster; destroy the app stage before its cluster stage. The shared `scripts/kind-load-images.sh` accepts either cluster name.

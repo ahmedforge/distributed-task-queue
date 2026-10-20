@@ -5,10 +5,10 @@
 Pick two or three, retaining the workload qualifiers on measured results:
 
 - Built a Dockerized PDF processing system with FastAPI, PostgreSQL, Redis-backed SAQ, and React, providing live WebSocket progress, ZIP downloads, failed-job management, and Prometheus/Grafana monitoring.
-- Implemented database-enforced concurrent-upload idempotency, durable dispatch intent, bounded retries with jitter, worker-state reconciliation, and retryable file deletion; validated backend behavior with 80 tests and GitHub Actions checks.
+- Implemented database-enforced concurrent-upload idempotency, durable dispatch intent, bounded retries with jitter, worker-state reconciliation, and retryable file deletion; validated backend behavior with 86 local tests and maintained GitHub Actions checks.
 - Measured 40 synthetic two-page PDFs in 21.78 seconds (1.84 jobs/sec) on a worker limited to two CPUs; recovered all four interrupted jobs in a controlled SIGKILL test with a 30-second task timeout and Redis/storage retained.
 
-- Added MinIO-backed shared storage and KEDA queue-driven autoscaling; verified 1 → 3 → 1 worker pods on a single-node Kubernetes demo while processing 16 synthetic twenty-page PDFs and validating all 320 output pages as PNG files.
+- Added MinIO shared storage and Terraform/Helm provisioning for a local kind cluster; verified full destroy/recreate and KEDA 1 → 3 → 1 worker scaling while processing 16 synthetic twenty-page PDFs and validating all 320 output pages as PNG files.
 
 Short project description:
 
@@ -65,7 +65,7 @@ Only completed and failed jobs can be deleted. Deletion and requeue use the same
 - The crash check retained PostgreSQL, Redis, and shared storage; it did not test a full-host failure or Redis data loss.
 - Default local storage is limited to one shared Docker host. The optional MinIO backend lets workers use independent filesystems; the verified Kubernetes demo still runs on one physical host.
 - The app is a local portfolio demo, with no authentication, owner isolation, public-service rate limiting, or age-based retention policy.
-- Shared object storage, two-worker crash recovery, and local Kubernetes/KEDA scaling are implemented in v2. Terraform, cloud rollout, and multi-node availability remain outside scope. No AWS deployment is claimed.
+- Shared object storage, two-worker crash recovery, and local Kubernetes/KEDA scaling are implemented in v2. Terraform now provisions local kind only; cloud rollout and multi-node availability remain outside scope. No AWS deployment is claimed.
 
 ## v1 completion record
 

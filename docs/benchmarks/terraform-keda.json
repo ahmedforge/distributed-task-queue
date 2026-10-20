@@ -1,0 +1,382 @@
+{
+  "started_at_utc": "2026-10-20T06:49:35.040548+00:00",
+  "jobs": 16,
+  "pages_per_pdf": 20,
+  "samples": [
+    {
+      "elapsed_seconds": 0.53,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 3.87,
+      "queued": 4,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 7.56,
+      "queued": 15,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    },
+    {
+      "elapsed_seconds": 14.15,
+      "queued": 15,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 20.83,
+      "queued": 12,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 27.38,
+      "queued": 12,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 34.44,
+      "queued": 9,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 40.53,
+      "queued": 9,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 47.27,
+      "queued": 6,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 53.95,
+      "queued": 6,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 60.34,
+      "queued": 3,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 66.54,
+      "queued": 3,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 72.73,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 79.14,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 85.17,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 92.59,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 97.24,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 101.94,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 106.71,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 111.11,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 115.53,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 119.91,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 124.27,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 128.67,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 133.23,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 137.86,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 142.53,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 147.17,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 152.06,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 156.57,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 161.03,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 165.43,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 169.92,
+      "queued": 0,
+      "desired_workers": 3,
+      "ready_workers": 3,
+      "nonterminating_worker_pods": 3,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 174.37,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 178.83,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 183.26,
+      "queued": 0,
+      "desired_workers": 2,
+      "ready_workers": 2,
+      "nonterminating_worker_pods": 2,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 187.96,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 192.65,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 3
+    },
+    {
+      "elapsed_seconds": 197.33,
+      "queued": 0,
+      "desired_workers": 1,
+      "ready_workers": 1,
+      "nonterminating_worker_pods": 1,
+      "total_worker_pods": 1
+    }
+  ],
+  "limits": "Single kind node on a shared laptop; not production capacity or multi-node HA.",
+  "kubernetes_versions": [
+    "v1.35.8"
+  ],
+  "scaledobject_spec": {
+    "advanced": {
+      "horizontalPodAutoscalerConfig": {
+        "behavior": {
+          "scaleDown": {
+            "stabilizationWindowSeconds": 120
+          },
+          "scaleUp": {
+            "stabilizationWindowSeconds": 0
+          }
+        }
+      },
+      "scalingModifiers": {}
+    },
+    "maxReplicaCount": 3,
+    "minReplicaCount": 1,
+    "scaleTargetRef": {
+      "name": "worker"
+    },
+    "triggers": [
+      {
+        "metadata": {
+          "activationListLength": "0",
+          "address": "redis.dtq.svc.cluster.local:6379",
+          "databaseIndex": "0",
+          "listLength": "2",
+          "listName": "saq:tasks:queued"
+        },
+        "type": "redis"
+      }
+    ]
+  },
+  "initial_runtime_worker_containers": 1,
+  "websocket_snapshot_verified": true,
+  "all_completed_seconds": 89.25,
+  "final_runtime_worker_containers": 1,
+  "passed": true,
+  "job_ids": [
+    4,
+    3,
+    2,
+    1,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "verified_zip_archives": 16,
+  "peak_ready_workers": 3,
+  "returned_to_one_worker": true,
+  "finished_at_utc": "2026-10-20T06:52:54.553336+00:00"
+}

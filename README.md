@@ -60,7 +60,7 @@ Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: h
 
 [60-second screenshot walkthrough](docs/demo/walkthrough.mp4) · [GIF preview](docs/demo/preview.gif) · [Screenshots](docs/demo/README.md) · [Resume and interview notes](docs/portfolio.md)
 
-**Local v1 and the bounded local v2 scope are complete.** Latest backend validation: 80 passing tests, including real MinIO integration. The sections below document operation and known limits.
+**Local v1 and the bounded local v2 scope are complete.** Latest backend validation: 86 passing tests, including real MinIO integration. The sections below document operation and known limits.
 
 ## Stack
 
@@ -223,7 +223,7 @@ Cloud deployment, full authentication, and age-based retention remain outside th
 
 ## Deployment status
 
-Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. GitHub Actions validates backend code, migrations, and the frontend build; it does not publish images or perform deployment. The optional [local Kubernetes/KEDA deployment](docs/kubernetes.md) is provided separately. Terraform, AWS infrastructure and automated cloud delivery are not implemented.
+Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. Existing GitHub Actions CI validates backend code, migrations, and the frontend build. A separate version-tag workflow is configured to publish GHCR images; remote publication has not yet been exercised. The optional [manual Kubernetes/KEDA setup](docs/kubernetes.md) and [Terraform local setup](terraform/README.md) are provided separately. No automatic deployment, AWS infrastructure, or cloud rollout is implemented.
 
 Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
 
@@ -245,3 +245,51 @@ A [two-worker shared-storage verification](docs/benchmarks/shared-workers.md) ch
 [Setup, scaling behavior, verification and cleanup](docs/kubernetes.md). This optional single-node demo scales worker pods on the actual SAQ Redis list. It keeps one worker for delayed retries and interruption recovery and uses MinIO for persistent artifacts.
 
 Recorded local verification: **1 → 3 → 1 workers**, **16/16 twenty-page PDFs completed**, all 16 ZIPs validated, and the frontend WebSocket proxy checked. This ran on one kind node; it is not a multi-host or sustained-capacity claim. [Results and limits](docs/kubernetes.md#recorded-verification) · [Raw observations](docs/benchmarks/keda.json).
+
+## Infrastructure
+
+**Terraform provisions a local kind cluster. Not deployed to a cloud provider.**
+
+```mermaid
+flowchart LR
+    Tag[Owner pushes version tag] --> Publish[Buildx build and Trivy report]
+    Publish --> GHCR[GHCR image packages]
+    TF[Owner runs Terraform] --> Kind[Local kind cluster]
+    Kind --> Infra[PostgreSQL / Redis / MinIO]
+    Kind --> App[API / worker / frontend]
+    Kind --> KEDA[KEDA manages worker HPA]
+```
+
+The tag workflow is configured, not yet release-tested. There is no automatic
+connection from publishing to deployment: the owner explicitly selects local or
+published image versions and runs Terraform.
+
+| Run mode | Command or guide |
+| --- | --- |
+| Compose with monitoring | `docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d` |
+| Manual kind | `./scripts/k8s-local.sh create`, then `deploy` and `open`; [full guide](docs/kubernetes.md) |
+| Terraform on kind | [Exact init, validate, plan, apply and destroy commands](terraform/README.md) |
+| Version-tag publishing | [Package names, version policy, Trivy policy and release procedure](docs/image-publishing.md) |
+
+Terraform reuses the existing Kubernetes YAML through Helm, installs KEDA, and
+accepts a GHCR prefix/tag or locally loaded development images. Prometheus and
+Grafana remain Compose-only; they are not present in the Kubernetes manifests.
+[Actual command results and verification limits](docs/infrastructure-verification.md)
+are recorded separately from the earlier workload benchmarks.
+
+## Known limitations
+
+- Local-only demo: no cloud deployment or verified multi-node availability.
+- No authentication or document/job ownership isolation.
+- No automatic deployment. Version publishing requires an owner-pushed tag and
+  its first GHCR publication is still unverified.
+- Trivy blocks fixable HIGH/CRITICAL frontend findings. API/worker/MinIO findings
+  are report-only due to verified OS/upstream dependency vulnerabilities; the
+  images are not claimed vulnerability-free.
+- No age-based retention or public-service rate limiting. Upload size/page limits
+  exist, but they are not sufficient protection for an unrestricted public demo.
+- Redis data loss and expired queue records remain recovery limits; execution is
+  not exactly once. Kubernetes uses one Docker node with local PVCs, and destroy
+  removes that demo data.
+- Terraform state/plans and kubeconfig contain sensitive data. They are ignored,
+  local files, not an encrypted remote state backend.

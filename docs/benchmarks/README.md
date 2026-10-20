@@ -56,3 +56,5 @@ See the [separate two-worker and survivor-only crash experiment](shared-workers.
 ## v2: local Kubernetes autoscaling
 
 The [Kubernetes verification report](../kubernetes.md#recorded-verification) and [raw observations](keda.json) record real PDF processing and KEDA scale-up/scale-down. This is a single-node correctness experiment, not a throughput comparison with the v1 or two-worker workloads.
+
+The [Terraform local lifecycle verification](../infrastructure-verification.md) includes a separate [real-job KEDA run](terraform-keda.json), full destroy/recreate, and post-recreation PDF smoke check. It is not a controlled throughput comparison.
