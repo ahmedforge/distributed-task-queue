@@ -15,25 +15,7 @@ case "${1:-help}" in
     ;;
   deploy)
     k get nodes >/dev/null
-    docker build -t dtq-app:k8s "$ROOT"
-    docker build -t dtq-frontend:k8s "$ROOT/frontend"
-    if ! docker image inspect dtq-minio:k8s >/dev/null 2>&1; then
-      docker build -f "$ROOT/docker/minio.Dockerfile" -t dtq-minio:k8s "$ROOT"
-    fi
-    for image in postgres:16-alpine redis:7-alpine; do
-      docker image inspect "$image" >/dev/null 2>&1 || docker pull "$image"
-    done
-    case "$(docker info --format '{{.Architecture}}')" in
-      x86_64|amd64) platform=linux/amd64 ;;
-      aarch64|arm64) platform=linux/arm64 ;;
-      *) echo "Unsupported local node architecture" >&2; exit 1 ;;
-    esac
-    archive="$(mktemp /tmp/dtq-kind-images.XXXXXX.tar)"
-    trap 'rm -f "$archive"' EXIT
-    docker image save --platform "$platform" --output "$archive" dtq-app:k8s dtq-frontend:k8s dtq-minio:k8s postgres:16-alpine redis:7-alpine
-    "$KIND_BIN" load image-archive --name dtq-v2 "$archive"
-    rm -f "$archive"
-    trap - EXIT
+    "$ROOT/scripts/kind-load-images.sh" dtq-v2
     k apply -f "$ROOT/k8s/namespace.yaml"
     for file in config postgres redis minio; do k -n dtq apply -f "$ROOT/k8s/$file.yaml"; done
     for dep in postgres redis minio; do k -n dtq rollout status "deployment/$dep" --timeout=240s; done

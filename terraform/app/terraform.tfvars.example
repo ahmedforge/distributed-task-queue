@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (ignored). These placeholders are not credentials.
+postgres_password = "replace-with-a-disposable-local-password"
+minio_password    = "replace-with-another-disposable-local-password"
+use_local_images  = true
+# After publishing and making the GHCR packages public:
+# use_local_images = false
+# image_repository = "ghcr.io/ahmedforge/distributed-task-queue"
+# image_tag        = "v1.0.0"

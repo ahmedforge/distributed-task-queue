@@ -21,7 +21,7 @@ async def verify(args):
         "--kubeconfig",
         str(args.kubeconfig),
         "--context",
-        "kind-dtq-v2",
+        f"kind-{args.cluster}",
         "-n",
         "dtq",
     ]
@@ -43,7 +43,7 @@ async def verify(args):
         proc = await asyncio.create_subprocess_exec(
             "docker",
             "exec",
-            "dtq-v2-control-plane",
+            f"{args.cluster}-control-plane",
             "crictl",
             "ps",
             "--name",
@@ -280,6 +280,7 @@ async def verify(args):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--kubectl", default="kubectl")
+    p.add_argument("--cluster", default="dtq-v2")
     p.add_argument("--kubeconfig", type=Path, default=ROOT / ".local-k8s/kubeconfig")
     p.add_argument("--jobs", type=int, default=16)
     p.add_argument("--output", type=Path, default=ROOT / "docs/benchmarks/keda.json")

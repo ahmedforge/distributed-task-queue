@@ -14,3 +14,13 @@ data/
 
 # Local kind kubeconfig and generated files
 .local-k8s/
+
+# Terraform local state, plans, credentials and provider downloads
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+terraform/cluster/kubeconfig
+crash.log

@@ -7,3 +7,6 @@
 frontend
 data
 *.log
+
+# Local Terraform providers, state, plans and credentials are not build inputs.
+terraform
