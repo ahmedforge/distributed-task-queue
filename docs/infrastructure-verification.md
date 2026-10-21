@@ -2,7 +2,7 @@
 
 Terraform provisions a local kind cluster. Not deployed to a cloud provider.
 
-These commands were run against the working tree based on `c9df5b0`; the new
+The October 20 commands were run against the working tree based on `c9df5b0`; the new
 changes were not committed or pushed. This records **local verification**, not a
 GitHub Actions run or a successful GHCR publication. Temporary tools were placed
 under `/tmp/dtq-infra-tools`; commands below shorten that prefix to the executable
@@ -247,3 +247,96 @@ The existing local demo was checked again: API health returned
 helper's CLI was also checked with a deliberately different `GITHUB_SHA`; its
 SHA tag used `git rev-parse HEAD`, so annotated Git tags resolve to the commit.
 No release tag was created or pushed.
+
+
+## Published release verification — October 21, 2026
+
+These follow-up checks use committed release `v2.0.0` at `d70ebb729b297c29d5f4d134fd9af28e2eb48970`; the earlier local-only publication limits above describe the October 20 checks.
+
+`git tag -l` initially returned no tags. Main CI had passed for this commit and the working tree was clean. The following annotated tag commands were actually run, with the user's authorization:
+
+```bash
+git tag -a v2.0.0 -m "v2.0.0"
+git push origin v2.0.0
+```
+
+[Publishing workflow](https://github.com/ahmedforge/distributed-task-queue/actions/runs/39557477535): **success**, including all four image jobs. The API scan emitted a non-fatal cache-save warning. No release tag was moved, no release candidate was published, and no new source commit was made by the agent.
+
+After `docker logout ghcr.io`, all four `docker pull ghcr.io/ahmedforge/distributed-task-queue-SERVICE:v2.0.0` checks succeeded using a new empty temporary Docker config. This proved anonymous access without adding an imagePullSecret or modifying package visibility. The OCI `org.opencontainers.image.source` label in every image was `https://github.com/ahmedforge/distributed-task-queue`.
+
+Anonymous registry manifest requests confirmed that each image's `v2.0.0`, `sha-d70ebb7` and `latest` tags matched:
+
+| Service | Published manifest digest |
+| --- | --- |
+| api | `sha256:00952a43c6981b2ad77324d570185c7f2dd31d68053bd2d70ea1c10a20af724a` |
+| worker | `sha256:a4349620e3e0cc273a3aa62ad7ed1d16174ccc2795d24f65388b7fe55774deb8` |
+| frontend | `sha256:5e523200492a857e648f19de6812e358e39060ae7fe9ab31ec3265b0e0732e75` |
+| minio | `sha256:aa07c32b36e18263ad9a394e3fdacabfa8dc1c432617d3566ad4d8d55ef01f8a` |
+
+Actual release Trivy reports (fixable HIGH/CRITICAL only):
+
+| Image | HIGH | CRITICAL | Policy |
+| --- | ---: | ---: | --- |
+| API | 3 | 0 | Report-only |
+| Worker | 3 | 0 | Report-only |
+| Frontend | 0 | 0 | Blocking |
+| MinIO | 62 | 5 | Report-only |
+
+These are package vulnerability occurrences, not unique CVEs. API/worker findings are Starlette advisories; MinIO findings are in the compiled Go toolchain/dependencies. OS findings were zero in these fresh release images. The existing report-only exceptions include dependencies the project can upgrade; successful publication is not security clearance. The older cached-image snapshot remains unchanged as historical evidence. The release's Trivy text reports were downloaded separately from Docker build-record artifacts, which the GitHub CLI could not extract as ZIP files.
+
+
+### Published images on a fresh kind node
+
+Preparation included a teardown-order mistake: cluster removal started before the old namespace deletion had finished, so the old app destroy failed with a connection error. Docker confirmed the old node was gone. The now-nonexistent namespace state entry was removed with `terraform -chdir=terraform/app state rm kubernetes_namespace_v1.app`. The kind provider could not refresh a deleted cluster (`could not locate any control plane nodes`), so its stale entry was removed with `terraform -chdir=terraform/cluster state rm kind_cluster.local`. This repair was limited to the confirmed-deleted disposable demo. The final teardown was subsequently guarded to run cluster destruction only after a successful app destroy.
+
+The old `dtq-app:k8s`, `dtq-frontend:k8s`, and `dtq-minio:k8s` tags were removed. A new Terraform-managed node was created with Docker ID `1d0a2f20aef625e3c8fcf92ec41391dda8a13a5a9f7c90eb130ec473c3d5e697`. No application image was imported into this node. Host Docker anonymous pulls and the fresh kind node use separate image stores; pod events recorded registry pulls, including the API image first pulled by the migration/bucket bootstrap hook.
+
+Actual commands from the repository root (temporary binary paths are omitted in this abbreviated transcript):
+
+```bash
+terraform -chdir=terraform/cluster plan -out=release-cluster.tfplan
+terraform -chdir=terraform/cluster apply release-cluster.tfplan
+terraform -chdir=terraform/app plan -var=use_local_images=false -var=image_tag=v2.0.0 -out=release-app.tfplan
+terraform -chdir=terraform/app apply release-app.tfplan
+kubectl --kubeconfig terraform/cluster/kubeconfig --context kind-dtq-tf -n dtq get pods -o jsonpath='{..image}'
+kubectl --kubeconfig terraform/cluster/kubeconfig --context kind-dtq-tf -n dtq describe pods
+kubectl --kubeconfig terraform/cluster/kubeconfig --context kind-dtq-tf -n dtq wait scaledobject/worker-queue --for=condition=Ready --timeout=120s
+```
+
+Actual results:
+
+```text
+# cluster apply
+Apply complete! Resources: 2 added, 0 changed, 0 destroyed.
+# app apply
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+# smoke check
+API health: {"status":"healthy"}
+Frontend HTTP 200
+Job 1: COMPLETED
+ZIP integrity, two-page count and PNG signatures: passed
+```
+
+All four application containers were Ready, selected the expected `ghcr.io/ahmedforge/distributed-task-queue-SERVICE:v2.0.0` reference, had no imagePullSecrets, and reported runtime image digests identical to the anonymous manifest checks above. PostgreSQL, Redis, and KEDA retained their upstream images. Cold pulls took several minutes; no application images were locally loaded to bypass them. KEDA's initial certificate refresh restarted its operator once before it became Ready. This was a deployment/smoke check, not a repeated load or scaling benchmark.
+
+
+### Final release-test teardown
+
+The following commands ran sequentially under `set -e`, so cluster deletion could not start until app destruction returned success:
+
+```bash
+terraform -chdir=terraform/app destroy -auto-approve -var=use_local_images=false -var=image_tag=v2.0.0
+terraform -chdir=terraform/cluster destroy -auto-approve
+```
+
+Actual final output:
+
+```text
+kubernetes_namespace_v1.app: Destruction complete after 2m43s
+Destroy complete! Resources: 7 destroyed.
+kind_cluster.local: Destruction complete after 3s
+Destroy complete! Resources: 2 destroyed.
+Verified: dtq-tf-control-plane is absent.
+```
+
+Both `terraform state list` commands then returned no entries. The namespace finalized normally; no finalizer was stripped and no state repair was needed in this final release-test teardown. The dedicated test cluster is no longer running. The initial preparation error above is retained in this record instead of being represented as a clean destroy.

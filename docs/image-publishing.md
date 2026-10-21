@@ -48,14 +48,15 @@ that these images are free of vulnerabilities or ready for public deployment.
 ## Release procedure (owner runs these)
 
 First commit/push the reviewed changes and let the existing CI pass. Choose an
-unused stable version; `v1.0.0` below is only an example, not a published version:
+unused stable version. `v2.0.0` is already published; `v2.0.1` below is an example for a future release, not a tag created by this guide:
 
 ```bash
-git tag -a v1.0.0 -m "Release v1.0.0"
-git push origin v1.0.0
+git tag -l
+git tag -a v2.0.1 -m "v2.0.1"
+git push origin v2.0.1
 ```
 
 After the tag workflow succeeds, inspect the four package pages and test a pull
-of the selected version before choosing it in Terraform. No tag or image was
-published during the local implementation checks. Workflow linting and local
-build/scans do not prove that GitHub package permissions or remote pushes work.
+of the selected version before choosing it in Terraform. The first release, [`v2.0.0`](https://github.com/ahmedforge/distributed-task-queue/actions/runs/39557477535), published all four images successfully on October 21, 2026. Anonymous pulls, OCI source labels, and matching stable/SHA/latest manifest digests were verified. The API job emitted a non-fatal Trivy cache-save warning; its scan and publication still passed. See [recorded release verification](infrastructure-verification.md#published-release-verification--october-21-2026).
+
+If a release needs a code fix before any image publishes, a failed tag can be replaced after checking remote publication. Once any image has published, use a new patch version instead of force-moving that tag. A transient job can be rerun for the unchanged tagged commit. This workflow does not support release-candidate publishing: its metadata validation rejects prereleases before any image build, so they cannot update `latest`.

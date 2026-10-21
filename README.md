@@ -223,7 +223,7 @@ Cloud deployment, full authentication, and age-based retention remain outside th
 
 ## Deployment status
 
-Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. Existing GitHub Actions CI validates backend code, migrations, and the frontend build. A separate version-tag workflow is configured to publish GHCR images; remote publication has not yet been exercised. The optional [manual Kubernetes/KEDA setup](docs/kubernetes.md) and [Terraform local setup](terraform/README.md) are provided separately. No automatic deployment, AWS infrastructure, or cloud rollout is implemented.
+Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. Existing GitHub Actions CI validates backend code, migrations, and the frontend build. The version-tag workflow published all four `v2.0.0` GHCR images; anonymous pulls and their repository source labels were verified on October 21, 2026. The optional [manual Kubernetes/KEDA setup](docs/kubernetes.md) and [Terraform local setup](terraform/README.md) are provided separately. No automatic deployment, AWS infrastructure, or cloud rollout is implemented.
 
 Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
 
@@ -260,9 +260,19 @@ flowchart LR
     Kind --> KEDA[KEDA manages worker HPA]
 ```
 
-The tag workflow is configured, not yet release-tested. There is no automatic
-connection from publishing to deployment: the owner explicitly selects local or
-published image versions and runs Terraform.
+[Release `v2.0.0`](https://github.com/ahmedforge/distributed-task-queue/actions/runs/39557477535) successfully published API, worker, frontend and MinIO images from commit `d70ebb7` on October 21, 2026. All four passed anonymous pulls using an empty Docker credential directory after `docker logout ghcr.io`; no package visibility changes were needed. Each image has the repository source label, and its version, SHA and `latest` tags resolved to the same digest. Only stable versions are accepted; release candidates are rejected before builds and cannot update `latest`.
+
+To pull the verified release:
+
+```bash
+docker logout ghcr.io
+docker pull ghcr.io/ahmedforge/distributed-task-queue-api:v2.0.0
+docker pull ghcr.io/ahmedforge/distributed-task-queue-worker:v2.0.0
+docker pull ghcr.io/ahmedforge/distributed-task-queue-frontend:v2.0.0
+docker pull ghcr.io/ahmedforge/distributed-task-queue-minio:v2.0.0
+```
+
+There is no automatic connection from publishing to deployment: the owner explicitly selects local or published image versions and runs Terraform.
 
 | Run mode | Command or guide |
 | --- | --- |
@@ -274,18 +284,14 @@ published image versions and runs Terraform.
 Terraform reuses the existing Kubernetes YAML through Helm, installs KEDA, and
 accepts a GHCR prefix/tag or locally loaded development images. Prometheus and
 Grafana remain Compose-only; they are not present in the Kubernetes manifests.
-[Actual command results and verification limits](docs/infrastructure-verification.md)
-are recorded separately from the earlier workload benchmarks.
+The published `v2.0.0` images were deployed on a fresh kind node with Terraform; all four runtime digests matched GHCR, and a two-page PDF job completed with valid PNG output. The app and cluster were then successfully destroyed. [Actual command results and verification limits](docs/infrastructure-verification.md) are recorded separately from the earlier workload benchmarks.
 
 ## Known limitations
 
 - Local-only demo: no cloud deployment or verified multi-node availability.
 - No authentication or document/job ownership isolation.
-- No automatic deployment. Version publishing requires an owner-pushed tag and
-  its first GHCR publication is still unverified.
-- Trivy blocks fixable HIGH/CRITICAL frontend findings. API/worker/MinIO findings
-  are report-only due to verified OS/upstream dependency vulnerabilities; the
-  images are not claimed vulnerability-free.
+- No automatic deployment. Version publishing requires an owner-pushed stable tag.
+- Trivy blocks fixable HIGH/CRITICAL frontend findings. The `v2.0.0` release scans found **3 HIGH each in API and worker** (Starlette), **0 in frontend**, and **62 HIGH / 5 CRITICAL in MinIO** (Go toolchain/dependencies). API/worker/MinIO remain report-only; these include project-controllable dependency issues, and the images are not claimed vulnerability-free. Counts are package vulnerability occurrences at scan time. [Recorded findings and scan policy](docs/infrastructure-verification.md#published-release-verification--october-21-2026).
 - No age-based retention or public-service rate limiting. Upload size/page limits
   exist, but they are not sufficient protection for an unrestricted public demo.
 - Redis data loss and expired queue records remain recovery limits; execution is

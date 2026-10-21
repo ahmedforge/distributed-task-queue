@@ -70,15 +70,15 @@ are public, change the ignored `app/terraform.tfvars`:
 ```hcl
 use_local_images = false
 image_repository = "ghcr.io/ahmedforge/distributed-task-queue"
-image_tag        = "v1.0.0" # Example only; choose a version that actually exists.
+image_tag        = "v2.0.0" # Verified published release, October 21, 2026.
 ```
 
 This selects `PREFIX-api:TAG`, `PREFIX-worker:TAG`, `PREFIX-frontend:TAG`, and
 `PREFIX-minio:TAG`. The bootstrap Job uses the API image. You can skip the local
 build/load step in this mode. The chart retains `IfNotPresent`; prefer immutable
 version or SHA tags. This demo does not configure private-registry credentials.
-See [publishing](../docs/image-publishing.md) for the unverified-until-tagged
-workflow and scanner policy.
+See [publishing](../docs/image-publishing.md) for the verified `v2.0.0` release
+and scanner policy.
 
 ## Destroy and reproduce
 
@@ -135,6 +135,6 @@ kind workflow; already-cached KEDA 2.21.0 images are imported too, otherwise
 Kubernetes downloads them normally. `scripts/verify_keda.py --cluster NAME` runs the existing real-job
 check against that named cluster, leaving its original default unchanged.
 
-[Recorded commands, failures/recovery, and measured results](../docs/infrastructure-verification.md) distinguish local verification from the pending GHCR release run.
+[Recorded commands, failures/recovery, and measured results](../docs/infrastructure-verification.md) include the local lifecycle checks and the successful `v2.0.0` GHCR release run.
 
 For application-code edits using the fixed local `:k8s` tags, import the rebuilt images and restart the affected Deployments. Terraform image variables select references; this setup does not provide an automatic code rollout pipeline.

@@ -5,4 +5,4 @@ use_local_images  = true
 # After publishing and making the GHCR packages public:
 # use_local_images = false
 # image_repository = "ghcr.io/ahmedforge/distributed-task-queue"
-# image_tag        = "v1.0.0"
+# image_tag        = "v2.0.0"
