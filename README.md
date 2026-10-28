@@ -1,301 +1,69 @@
-# DistribuQueue — Distributed PDF Task Queue
+# DistribuQueue - Distributed PDF Task Queue
 
-Upload PDFs, render pages in background workers, track live progress, and download the results as ZIPs. Built with FastAPI, PostgreSQL, Redis-backed SAQ, and React.
+Upload a PDF, watch its pages render in background workers, and download the results as a ZIP. A React dashboard connects the full workflow, from submission to retries and live progress.
 
-## Architecture
+**React/TypeScript · FastAPI · PostgreSQL · Redis/SAQ · Docker**
 
-```mermaid
-flowchart LR
-    UI[React dashboard] -->|Upload, status, download| API[FastAPI API]
-    API -->|Persist job state| DB[(PostgreSQL)]
-    API -->|Enqueue task| Redis[(Redis / SAQ)]
-    Redis -->|Dispatch and retry| Worker[PDF workers / Poppler]
-    Worker -->|Progress and outcome| DB
-    API --> Files[(Local volume or MinIO)]
-    Worker --> Files
-    Worker -->|Progress events and metrics| Redis
-    Redis -->|Pub/Sub| API
-    API -->|WebSocket progress| UI
-    Prom[Prometheus - Compose] -->|Scrape /metrics| API
-    Grafana[Grafana - Compose] -->|Query history| Prom
-    KEDA[KEDA - optional Kubernetes] -.->|Ready queue length| Redis
-    KEDA -.->|1 to 3 replicas| Worker
-```
+[Demo walkthrough](docs/demo/walkthrough.mp4) · [Screenshots](docs/demo/README.md) · [Architecture and operations](docs/operations.md) · [CI](https://github.com/ahmedforge/distributed-task-queue/actions)
 
-Uploads return after the input and durable delivery intent are saved; PDF rendering runs in a separate worker process. PostgreSQL is the source of job state, Redis handles dispatch and live notifications, and original PDFs and ZIPs use local storage by default or MinIO in the opt-in shared-storage setup. The local Kubernetes deployment uses MinIO and KEDA; its setup and limits are [documented separately](docs/kubernetes.md).
+![DistribuQueue dashboard with active jobs](docs/demo/01-dashboard-active-viewport.png)
 
-## One-command setup
+## Try it locally
 
-Requires Docker with Docker Compose. From a fresh checkout, start the full app and monitoring:
+Requires Docker with Docker Compose. From a fresh checkout:
 
 ```bash
+git clone https://github.com/ahmedforge/distributed-task-queue.git
+cd distributed-task-queue
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d
 ```
 
-Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: http://localhost:3001 (initially `admin` / `admin`). Defaults work without an `.env` file; existing PostgreSQL volumes require their existing password. Port conflicts and development setup are covered [below](#run-locally-with-docker).
+Open **http://localhost:3000**, choose a PDF, and select **Upload and Render**. Follow its progress, then download the ZIP. API docs: http://localhost:8001/docs. Grafana: http://localhost:3001 (initial local login: `admin` / `admin`).
 
-## Benchmark results and limits
-
-| Recorded local check | Result |
-| --- | --- |
-| Load | 40 synthetic two-page PDFs in **21.78 seconds — 1.84 jobs/second** |
-| Output validation | 40/40 ZIPs passed integrity, page-count, and PNG-signature checks |
-| Worker SIGKILL | 4/4 interrupted ten-page jobs recovered with valid ZIPs in **88.17 seconds** |
-
-**Conditions:** one worker limited to **2 CPUs / 1 GiB**, concurrency 10, and eight concurrent upload requests. These were simple generated PDFs in one finite batch on a shared laptop, not sustained production capacity. The crash test retained Redis, PostgreSQL, and storage and used a **30-second task timeout**; the application default is **1800 seconds**. It does not establish exactly-once execution or guaranteed zero job loss.
-
-[Full methodology and reproduction](docs/benchmarks/README.md) · [Raw measurements](docs/benchmarks/latest.json)
-
-## Design decisions
-
-- **PostgreSQL owns job state and delivery intent.** A dispatch marker is committed with the job; the API retries Redis delivery after a crash or temporary outage. The shared SAQ key suppresses incomplete duplicate deliveries, without claiming a transaction spanning PostgreSQL and Redis.
-- **Use database constraints and row locks for concurrency.** `ON CONFLICT` resolves simultaneous uploads using one idempotency key; row locks serialize requeue, worker receipt, and deletion claims.
-- **Persist progress before publishing it.** Redis Pub/Sub and WebSockets provide live updates; reconnect and REST polling recover missed notifications. Pub/Sub is not a durable event log.
-- **Separate persistent artifacts from worker scratch.** MinIO lets independent workers exchange PDFs and ZIPs without a shared local filesystem. The default Compose setup still supports local storage.
-- **Keep one worker for SAQ housekeeping.** KEDA scales the local Kubernetes demo from 1 to 3 workers on ready queue depth; the baseline worker handles delayed retries and sweeping, which are absent from the ready list.
-
-## Demo
-
-![DistribuQueue dashboard](docs/demo/01-dashboard-active-viewport.png)
-
-[60-second screenshot walkthrough](docs/demo/walkthrough.mp4) · [GIF preview](docs/demo/preview.gif) · [Screenshots](docs/demo/README.md) · [Resume and interview notes](docs/portfolio.md)
-
-**Local v1 and the bounded local v2 scope are complete.** Latest backend validation: 86 passing tests, including real MinIO integration. The sections below document operation and known limits.
-
-## Stack
-
-| Layer | Technology |
-| --- | --- |
-| API and persistence | Python 3.12, FastAPI, SQLModel, async SQLAlchemy, PostgreSQL, Alembic |
-| Background processing | Redis, SAQ, Poppler |
-| Dashboard | React, TypeScript, Vite, TanStack Query, Tailwind CSS, Recharts |
-| Monitoring | Prometheus, Grafana |
-| Delivery and verification | Docker Compose, local Kubernetes/kind, KEDA, GitHub Actions, pytest, Black, Oxlint |
+Defaults work without an `.env` file. Existing PostgreSQL volumes require their existing password. See [development setup and port configuration](docs/operations.md#run-locally-with-docker).
 
 ## What this demonstrates
 
-- Separating request handling from background execution, with a persistent job lifecycle.
-- Database-enforced idempotency for repeated and simultaneous submissions, bounded retries with jitter, and manual recovery of failed jobs.
-- Redis Pub/Sub and WebSockets for live progress, with reconnect and REST polling when connections drop.
-- Database migrations, container networking, shared storage, and independent API/worker processes.
-- Request latency, queue depth, attempt outcomes, and processing-time measurements across processes.
-
-This is a working portfolio project, with explicit reliability limits listed below. It does not claim exactly-once processing or measured production-scale throughput.
-
-## Run locally with Docker
-
-Requires Docker and Docker Compose. From the repository root:
-
-```bash
-[ -f .env ] || cp .env.example .env
-docker compose up --build -d
-```
-
-Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8001/docs.
-
-For an existing PostgreSQL volume, set `POSTGRES_PASSWORD` in `.env` to its existing password. PostgreSQL initialization variables do not change credentials in an already-initialized volume. The API uses host port 8001; its internal Docker port remains 8000.
-
-The Docker image installs Poppler (`pdfinfo` and `pdftoppm`). API and worker containers share the `job_files` volume, so uploads and results survive container restarts. API processes run as a non-root user.
-
-The frontend image builds React using Node.js and serves the result from an unprivileged Nginx container. API requests and WebSockets are proxied through the dashboard's own address. The worker and frontend wait for the API healthcheck, after startup migrations finish. Browser routes also work when opened directly or refreshed.
-
-If port 3000 is occupied, set `FRONTEND_PORT=3002` in `.env` and open http://localhost:3002. For frontend development with live reload, use Node.js 22 and run:
-
-```bash
-docker compose up --build -d api worker
-cd frontend
-npm ci
-npm run dev
-```
-
-Stop the Docker frontend with `docker compose stop frontend` before running Vite on the same port.
-
-For running the API/worker outside Docker, install `poppler-utils`, install Python dependencies, and configure the individual PostgreSQL and Redis variables in `.env` for your local services. Set `STORAGE_DIR` to the same directory for both processes.
-
-## Processing behavior
-
-- Accepts PDFs up to 20 MiB and 50 pages by default; encrypted PDFs are unsupported.
-- Renders each page with a maximum dimension of 1600 pixels. Progress advances as pages finish; 100% means the ZIP is ready.
-- Rejects empty uploads, non-PDF headers, invalid extensions, and oversized uploads. Malformed PDFs fail during processing and use the normal retry/failed-job flow.
-- `max_retries` is the maximum **total attempts**, including the first attempt. A value of 3 permits an initial attempt and two retries. Manual requeue resets this budget and progress.
-- Automatic retries use exponential backoff with jitter: default windows are 2, 4, 8 seconds, doubling up to a 60-second cap. SAQ chooses a random delay within each window. Configure `RETRY_BASE_DELAY` and `RETRY_MAX_DELAY` in seconds; both must be positive. The worker scheduler dispatches due retries, so actual start times may be slightly later. Manual requeue starts a fresh immediate attempt.
-- Uses job IDs for storage paths; original upload names are display metadata. Rendering subprocesses have a 30-second timeout each.
-- A failed Redis progress notification is logged; it does not change the persisted task outcome. The polling UI can still retrieve the state.
-
-## Durable queue delivery
-
-Each upload or manual requeue saves a unique delivery key and a pending-delivery marker in the same PostgreSQL transaction as the job state. The API tries immediate delivery to SAQ; its background dispatcher also checks committed markers every two seconds, including after API restart. Redis outages leave accepted jobs `PENDING` for automatic delivery rather than moving them into the failed-job list. Uploads return HTTP 201 and requeues return HTTP 200 once their intent is saved, even when Redis is temporarily unavailable.
-
-Delivery uses the same SAQ key until acknowledged. A worker receipt clears the marker before rendering; completed/failed jobs and tasks from older requeue generations are not rendered again. PostgreSQL row locks serialize delivery claims and manual requeues. This closes the API-crash gap between saving a job and enqueueing it; it does not provide exactly-once execution or recover work lost after an acknowledged delivery if Redis loses its data. Worker interruption handling is described below; storage cleanup remains separate work.
-
-The API must remain running for automatic dispatch retries. The migration preserves existing jobs without replaying them; legacy stranded jobs require inspection and explicit recovery.
-
-## Worker interruption recovery
-
-The worker reconciles PostgreSQL with SAQ after each attempt. A cancelled/timed-out render becomes `PENDING` when SAQ has scheduled another attempt, or `FAILED` when its budget is exhausted. Attempts lost to a worker crash count toward the same budget when a later attempt starts. Graceful worker cancellation also updates the persisted state.
-
-For a worker killed without cleanup, a running SAQ worker's sweeper detects stuck tasks using their configured timeout (currently 1800 seconds), then retries or aborts them. The API recovery loop reflects that broker decision in PostgreSQL every two seconds. Detection is not immediate, and requires a running worker/sweeper and API. Recovery refreshes the broker record under a database row lock and ignores older dispatch generations.
-
-Missing Redis records are left unchanged rather than treated as proof of failure. SAQ terminal records currently expire after 600 seconds; recovery after Redis data loss or prolonged downtime beyond that retention still needs explicit investigation. This does not guarantee exactly-once execution. Reconciled terminal failures are counted without fabricating a processing duration for a killed process.
-
-## Deleting jobs and saved files
-
-Completed and failed job pages offer **Delete job and files**, with confirmation. Deletion removes the original PDF, rendered ZIP, leftover scratch files, and job metadata. Pending/processing jobs cannot be deleted (HTTP 409). Requeue and deletion use the same database row lock so a claimed requeue cannot lose its input to a concurrent delete.
-
-The API first commits a deletion marker, hides the job from lists/status/downloads, then removes its job directory and database row. Storage failures return HTTP 202; the background loop retries cleanup, including after restart. Crashes after file removal leave the marker available for another pass. Permanent storage permission failures need correction before cleanup can succeed. No age-based retention policy is enabled.
-
-Deleting a job also removes its idempotency-key claim once cleanup finishes; the key may then be reused. PostgreSQL dashboard counts represent retained jobs. Historical Prometheus measurements remain; SAQ's task record expires through its normal retention. The frontend clears that job's cached status and returns to the dashboard. Theme preferences are unaffected.
-
-## Dashboard metrics and notifications
-
-`/jobs/stats` returns an atomic Redis snapshot (ready, active, and delayed jobs), a waiting depth (ready + delayed), and completed-job counts per minute for the last 15 minutes from PostgreSQL. Unavailable queue metrics are returned as `null` with an error message; they are never displayed as a false zero.
-
-The queue chart keeps up to 60 samples in the current browser session, sampled every three seconds while the dashboard is open. History resets on reload; it is not persisted monitoring history. The completion chart includes the current, partial minute. Completion/failure notifications appear when a watched job changes from a non-terminal state, using the existing live progress cache and polling fallback. Opening an already-finished job does not produce a new notification.
-
-## Prometheus and Grafana
-
-Start the app plus monitoring:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d
-```
-
-- Grafana: http://localhost:3001, initially `admin` / `admin`. Set `GRAFANA_ADMIN_PASSWORD` in `.env` before the first start to choose a different initial password.
-- Prometheus: http://localhost:9090.
-- Raw API metrics: http://localhost:8001/metrics.
-
-The Prometheus data source and **DistribuQueue Overview** dashboard are provisioned automatically. Prometheus scrapes every 5 seconds and retains 7 days of history in its Docker volume. Grafana settings also use a persistent volume. Monitoring ports bind to localhost. Rate/percentile panels need multiple scrapes and some activity; an idle window may show no data.
-
-API instrumentation exports request counts and latency histograms by route template. Workers aggregate attempt counts, processing-time histograms, and terminal failures in Redis; the API exports the shared totals, so measurements include separate worker processes. Queue gauges report ready, active, and delayed jobs. Retries are separate attempts; durations exclude queue wait and retry delay. A failed/cancelled attempt differs from a terminal failure that exhausts the retry budget.
-
-Worker metrics are best effort. Failed metrics writes do not fail a successful render. If Redis cannot be scraped, `/metrics` reports `dtq_redis_metrics_available=0` and omits worker/queue values instead of inventing zeros. Redis counter totals reset if its data is lost; historical samples remain in Prometheus. The supplied setup uses one API exporter; if you scale API replicas, scrape one designated exporter for shared Redis totals to avoid double-counting them.
-
-## API
-
-- `POST /api/v1/jobs/upload`: multipart fields `file`, optional `max_retries` and `idempotency_key`.
-- `GET /api/v1/jobs?page=1&page_size=20&status=FAILED`: paginated list; status is optional and page size is capped at 100.
-- `GET /api/v1/jobs/{id}`: job state and progress.
-- `GET /api/v1/jobs/{id}/result`: ZIP download for a completed job.
-- `GET /api/v1/jobs/{id}/ws`: WebSocket progress events.
-- `GET /api/v1/jobs/stats`: job counts.
-- `GET /api/v1/jobs/dlq`: failed jobs.
-- `POST /api/v1/jobs/{id}/requeue`: retry a failed job using its saved input.
-- `DELETE /api/v1/jobs/{id}`: delete a completed/failed job and its saved files; HTTP 200 when cleaned, or 202 with `cleanup_pending=true` when cleanup will retry.
-
-### Try the API
-
-Submit a PDF (replace the file path):
-
-```bash
-curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/upload \
-  -F 'file=@sample.pdf;type=application/pdf' \
-  -F 'max_retries=3' \
-  -F 'idempotency_key=demo-upload-001'
-```
-
-Use the returned job ID in place of `123`:
-
-```bash
-curl --fail-with-body http://localhost:8001/api/v1/jobs/123
-# After the status becomes COMPLETED:
-curl --fail-with-body http://localhost:8001/api/v1/jobs/123/result -o pages.zip
-# For a FAILED job:
-curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/123/requeue
-```
-
-Reusing an idempotency key returns the existing job; use a new key for a new upload. Interactive API documentation is at [Swagger UI](http://localhost:8001/docs).
-
-Filename-only JSON submissions are no longer supported. Jobs created before file uploads were added have no PDF input and must be submitted again through the upload form.
-
-## Validation and remaining scope
-
-Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including upload-to-download, retry exhaustion, idempotent submission, and WebSocket delivery. Test fixtures create and drop tables: use a disposable test database. GitHub Actions runs separate backend and frontend checks on pushes and pull requests to `main`. Backend checks validate the Poetry lockfile, Black formatting, the migration lifecycle, and pytest using isolated PostgreSQL/Redis services and Poppler. Frontend checks install with `npm ci`, lint with Oxlint, and typecheck/build with TypeScript and Vite.
-
-The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
-
-Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included in Compose. The optional local Kubernetes/KEDA setup uses MinIO; it does not include the monitoring stack or establish multi-node availability.
-
-## v1 finish line
-
-This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The v1 feature scope is complete; v2 adds shared object storage, independent-worker recovery verification, and a local Kubernetes/KEDA demo. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
-
-Cloud deployment, full authentication, and age-based retention remain outside the bounded local v2 scope. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
-
-## Deployment status
-
-Docker Compose runs the frontend, backend, and optional monitoring on one machine. Vite remains available for frontend development. Existing GitHub Actions CI validates backend code, migrations, and the frontend build. The version-tag workflow published all four `v2.0.0` GHCR images; anonymous pulls and their repository source labels were verified on October 21, 2026. The optional [manual Kubernetes/KEDA setup](docs/kubernetes.md) and [Terraform local setup](terraform/README.md) are provided separately. No automatic deployment, AWS infrastructure, or cloud rollout is implemented.
-
-Multiple workers can share the volume on one Docker host. A multi-host deployment needs shared/object storage, an explicit migration strategy, and recovery guarantees before it can be presented as production ready.
-
-## Demo and presentation
-
-The [demo asset index](docs/demo/README.md) contains actual screenshots of submission, live processing, completion, failed-job management, and Grafana. The [60-second walkthrough](docs/demo/walkthrough.mp4) is an edited screenshot sequence with synthetic inputs. A real browser upload completed and its downloaded ZIP was verified to contain 30 PNG pages.
-
-Use the [portfolio notes](docs/portfolio.md) for concise resume bullets, the idempotency-race story, and explanations of durable dispatch, worker recovery, deletion, and their limits.
-
-## v2 shared storage (opt-in)
-
-MinIO-backed uploads and results are available through an optional Compose overlay.
-See [shared storage setup and limits](docs/shared-storage.md) before switching any existing demo.
-
-A [two-worker shared-storage verification](docs/benchmarks/shared-workers.md) checks independent worker participation and survivor-only recovery after SIGKILL.
-
-## Local Kubernetes and KEDA
-
-[Setup, scaling behavior, verification and cleanup](docs/kubernetes.md). This optional single-node demo scales worker pods on the actual SAQ Redis list. It keeps one worker for delayed retries and interruption recovery and uses MinIO for persistent artifacts.
-
-Recorded local verification: **1 → 3 → 1 workers**, **16/16 twenty-page PDFs completed**, all 16 ZIPs validated, and the frontend WebSocket proxy checked. This ran on one kind node; it is not a multi-host or sustained-capacity claim. [Results and limits](docs/kubernetes.md#recorded-verification) · [Raw observations](docs/benchmarks/keda.json).
-
-## Infrastructure
-
-**Terraform provisions a local kind cluster. Not deployed to a cloud provider.**
+- **Full-stack workflow:** upload validation, a paginated dashboard, failed-job management, live WebSocket progress with polling fallback, and ZIP downloads.
+- **Persistent job lifecycle:** PostgreSQL owns job state and dispatch intent; a recovery loop retries delivery when Redis is temporarily unavailable.
+- **Concurrency and recovery:** database-enforced submission idempotency, row locks for requeue/deletion, bounded retries with jitter, and interrupted-worker reconciliation.
+- **Observable execution:** Prometheus metrics and a provisioned Grafana dashboard cover API latency, queue depth, and worker outcomes.
+- **Optional infrastructure:** MinIO shared storage and a local Kubernetes/KEDA demo, with Terraform setup and versioned GHCR images.
 
 ```mermaid
 flowchart LR
-    Tag[Owner pushes version tag] --> Publish[Buildx build and Trivy report]
-    Publish --> GHCR[GHCR image packages]
-    TF[Owner runs Terraform] --> Kind[Local kind cluster]
-    Kind --> Infra[PostgreSQL / Redis / MinIO]
-    Kind --> App[API / worker / frontend]
-    Kind --> KEDA[KEDA manages worker HPA]
+    UI[React dashboard] -->|Upload / status / download| API[FastAPI]
+    API --> DB[(PostgreSQL job state)]
+    API --> Queue[(Redis / SAQ)]
+    Queue --> Worker[PDF workers]
+    Worker --> DB
+    API --> Storage[Local volume or MinIO]
+    Worker --> Storage
+    Queue -->|Progress through API WebSocket| UI
 ```
 
-[Release `v2.0.0`](https://github.com/ahmedforge/distributed-task-queue/actions/runs/39557477535) successfully published API, worker, frontend and MinIO images from commit `d70ebb7` on October 21, 2026. All four passed anonymous pulls using an empty Docker credential directory after `docker logout ghcr.io`; no package visibility changes were needed. Each image has the repository source label, and its version, SHA and `latest` tags resolved to the same digest. Only stable versions are accepted; release candidates are rejected before builds and cannot update `latest`.
+[Detailed architecture and design decisions](docs/operations.md#design-decisions)
 
-To pull the verified release:
+## Recorded verification
 
-```bash
-docker logout ghcr.io
-docker pull ghcr.io/ahmedforge/distributed-task-queue-api:v2.0.0
-docker pull ghcr.io/ahmedforge/distributed-task-queue-worker:v2.0.0
-docker pull ghcr.io/ahmedforge/distributed-task-queue-frontend:v2.0.0
-docker pull ghcr.io/ahmedforge/distributed-task-queue-minio:v2.0.0
-```
-
-There is no automatic connection from publishing to deployment: the owner explicitly selects local or published image versions and runs Terraform.
-
-| Run mode | Command or guide |
+| Local check | Recorded result |
 | --- | --- |
-| Compose with monitoring | `docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d` |
-| Manual kind | `./scripts/k8s-local.sh create`, then `deploy` and `open`; [full guide](docs/kubernetes.md) |
-| Terraform on kind | [Exact init, validate, plan, apply and destroy commands](terraform/README.md) |
-| Version-tag publishing | [Package names, version policy, Trivy policy and release procedure](docs/image-publishing.md) |
+| Finite load batch | 40 synthetic two-page PDFs in 21.78 seconds; all 40 ZIPs validated |
+| Worker interruption | All four interrupted ten-page jobs recovered with valid ZIPs |
+| Optional local KEDA demo | Workers scaled 1 → 3 → 1; all 16 twenty-page PDFs completed |
 
-Terraform reuses the existing Kubernetes YAML through Helm, installs KEDA, and
-accepts a GHCR prefix/tag or locally loaded development images. Prometheus and
-Grafana remain Compose-only; they are not present in the Kubernetes manifests.
-The published `v2.0.0` images were deployed on a fresh kind node with Terraform; all four runtime digests matched GHCR, and a two-page PDF job completed with valid PNG output. The app and cluster were then successfully destroyed. [Actual command results and verification limits](docs/infrastructure-verification.md) are recorded separately from the earlier workload benchmarks.
+The batch used one worker limited to 2 CPUs / 1 GiB. The crash check retained Redis, PostgreSQL, and storage, and used a 30-second task timeout rather than the 1800-second default. These are bounded local observations, not sustained production capacity or exactly-once guarantees.
 
-## Known limitations
+[Benchmark methodology and raw results](docs/benchmarks/README.md) · [KEDA verification](docs/kubernetes.md#recorded-verification)
 
-- Local-only demo: no cloud deployment or verified multi-node availability.
-- No authentication or document/job ownership isolation.
-- No automatic deployment. Version publishing requires an owner-pushed stable tag.
-- Trivy blocks fixable HIGH/CRITICAL frontend findings. The `v2.0.0` release scans found **3 HIGH each in API and worker** (Starlette), **0 in frontend**, and **62 HIGH / 5 CRITICAL in MinIO** (Go toolchain/dependencies). API/worker/MinIO remain report-only; these include project-controllable dependency issues, and the images are not claimed vulnerability-free. Counts are package vulnerability occurrences at scan time. [Recorded findings and scan policy](docs/infrastructure-verification.md#published-release-verification--october-21-2026).
-- No age-based retention or public-service rate limiting. Upload size/page limits
-  exist, but they are not sufficient protection for an unrestricted public demo.
-- Redis data loss and expired queue records remain recovery limits; execution is
-  not exactly once. Kubernetes uses one Docker node with local PVCs, and destroy
-  removes that demo data.
-- Terraform state/plans and kubeconfig contain sensitive data. They are ignored,
-  local files, not an encrypted remote state backend.
+## Engineering details
+
+- [API, processing behavior, retries, and recovery](docs/operations.md#api)
+- [Backend/frontend validation and CI](docs/operations.md#validation-and-remaining-scope)
+- [Shared object storage](docs/shared-storage.md)
+- [Local Kubernetes and KEDA](docs/kubernetes.md)
+- [Terraform setup](terraform/README.md)
+- [Image publishing](docs/image-publishing.md)
+- [Known limitations](docs/operations.md#known-limitations)
+
+This is a **local portfolio demo**. It has no authentication or document ownership isolation, no age-based retention, and no verified multi-node availability. Redis data loss and expired queue records remain recovery limits. Published image scan findings and their enforcement policy are [documented](docs/infrastructure-verification.md#published-release-verification--october-21-2026). Do not expose the upload service as an unrestricted public demo.
