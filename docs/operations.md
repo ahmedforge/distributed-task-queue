@@ -82,6 +82,10 @@ Open **http://localhost:3000**. API docs: http://localhost:8001/docs. Grafana: h
 
 This is a working portfolio project, with explicit reliability limits listed below. It does not claim exactly-once processing or measured production-scale throughput.
 
+## Accounts and private jobs
+
+Job access now requires an account. Existing jobs remain stored, unowned and hidden until explicitly assigned by an operator. See [accounts, migration, API authentication and HTTPS settings](accounts.md) before upgrading or using the API examples below. Per-user dashboard metrics describe owned jobs; broker-wide metrics remain operator data.
+
 ## Run locally with Docker
 
 Requires Docker and Docker Compose. From the repository root:
@@ -91,7 +95,7 @@ Requires Docker and Docker Compose. From the repository root:
 docker compose up --build -d
 ```
 
-Open http://localhost:3000, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8001/docs.
+Open http://localhost:3000, create an account or sign in, choose a PDF, and select **Upload and Render**. The dashboard lists jobs newest first, with status filters and pagination. The **Failed Jobs** view includes errors and retry controls. The responsive dashboard includes a persisted light/dark theme switch. The job page receives WebSocket progress, reconnects automatically, and polls every second during disconnection (every five seconds while connected to recover missed notifications) and offers a ZIP download when processing completes. API documentation is available at http://localhost:8001/docs.
 
 For an existing PostgreSQL volume, set `POSTGRES_PASSWORD` in `.env` to its existing password. PostgreSQL initialization variables do not change credentials in an already-initialized volume. The API uses host port 8001; its internal Docker port remains 8000.
 
@@ -184,10 +188,10 @@ Worker metrics are best effort. Failed metrics writes do not fail a successful r
 
 ### Try the API
 
-Submit a PDF (replace the file path):
+Authenticate first using the [cookie-jar example](accounts.md#api-clients). Submit a PDF (replace the file path):
 
 ```bash
-curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/upload \
+curl --fail-with-body -b /tmp/dtq-cookies -H 'X-DistribuQueue: 1' -X POST http://localhost:8001/api/v1/jobs/upload \
   -F 'file=@sample.pdf;type=application/pdf' \
   -F 'max_retries=3' \
   -F 'idempotency_key=demo-upload-001'
@@ -196,11 +200,11 @@ curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/upload \
 Use the returned job ID in place of `123`:
 
 ```bash
-curl --fail-with-body http://localhost:8001/api/v1/jobs/123
+curl --fail-with-body -b /tmp/dtq-cookies http://localhost:8001/api/v1/jobs/123
 # After the status becomes COMPLETED:
-curl --fail-with-body http://localhost:8001/api/v1/jobs/123/result -o pages.zip
+curl --fail-with-body -b /tmp/dtq-cookies http://localhost:8001/api/v1/jobs/123/result -o pages.zip
 # For a FAILED job:
-curl --fail-with-body -X POST http://localhost:8001/api/v1/jobs/123/requeue
+curl --fail-with-body -b /tmp/dtq-cookies -H 'X-DistribuQueue: 1' -X POST http://localhost:8001/api/v1/jobs/123/requeue
 ```
 
 Reusing an idempotency key returns the existing job; use a new key for a new upload. Interactive API documentation is at [Swagger UI](http://localhost:8001/docs).
@@ -213,13 +217,13 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes authentication, age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included in Compose. The optional local Kubernetes/KEDA setup uses MinIO; it does not include the monitoring stack or establish multi-node availability.
+Remaining work includes age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included in Compose. The optional local Kubernetes/KEDA setup uses MinIO; it does not include the monitoring stack or establish multi-node availability.
 
 ## v1 finish line
 
 This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The v1 feature scope is complete; v2 adds shared object storage, independent-worker recovery verification, and a local Kubernetes/KEDA demo. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
 
-Cloud deployment, full authentication, and age-based retention remain outside the bounded local v2 scope. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
+Cloud deployment, upload quotas, password recovery, and age-based retention remain outside the bounded local v2 scope. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
 
 ## Deployment status
 
@@ -289,7 +293,7 @@ The published `v2.0.0` images were deployed on a fresh kind node with Terraform;
 ## Known limitations
 
 - Local-only demo: no cloud deployment or verified multi-node availability.
-- No authentication or document/job ownership isolation.
+- Account authentication and job ownership are implemented; see [account behavior and limits](accounts.md). Password recovery is not implemented.
 - No automatic deployment. Version publishing requires an owner-pushed stable tag.
 - Trivy blocks fixable HIGH/CRITICAL frontend findings. The `v2.0.0` release scans found **3 HIGH each in API and worker** (Starlette), **0 in frontend**, and **62 HIGH / 5 CRITICAL in MinIO** (Go toolchain/dependencies). API/worker/MinIO remain report-only; these include project-controllable dependency issues, and the images are not claimed vulnerability-free. Counts are package vulnerability occurrences at scan time. [Recorded findings and scan policy](infrastructure-verification.md#published-release-verification--october-21-2026).
 - No age-based retention or public-service rate limiting. Upload size/page limits

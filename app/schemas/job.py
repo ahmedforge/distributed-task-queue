@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Literal
 from pydantic import BaseModel
 from app.models.job import JobRead, JobStatus
 
@@ -17,6 +17,7 @@ class ThroughputPoint(BaseModel):
 
 
 class JobStatsResponse(BaseModel):
+    queue_scope: Literal["account", "operator"] = "operator"
     queue_name: str = "default"
     total_jobs: int
     status_counts: Dict[str, int]

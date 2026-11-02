@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
+COPY scripts/assign_legacy_jobs.py /app/scripts/assign_legacy_jobs.py
 
 # Set permissions and switch user
 RUN mkdir -p /app/data/jobs && chown -R appuser:appgroup /app

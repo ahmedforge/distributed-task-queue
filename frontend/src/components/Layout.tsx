@@ -1,3 +1,5 @@
+import toast from 'react-hot-toast';
+import { useAuth } from '../auth-context';
 import React, { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { Layers, PlusCircle, AlertTriangle, List, Moon, Sun } from 'lucide-react';
@@ -5,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 
 export const Layout: React.FC = () => {
   const location = useLocation();
+  const { account, logout, loading } = useAuth();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try { return localStorage.getItem('distribuqueue-theme') === 'light' ? 'light' : 'dark'; }
     catch { return 'dark'; }
@@ -30,11 +33,12 @@ export const Layout: React.FC = () => {
             </button>
           </div>
           <nav aria-label="Main navigation" className="flex flex-wrap gap-2">
-            {navItems.map((item) => {
+            {account && navItems.map((item) => {
               const Icon = item.icon;
               const active = location.pathname === item.path;
               return <Link key={item.path} to={item.path} aria-current={active ? 'page' : undefined} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${active ? 'bg-panel-alt text-primary border-border' : 'text-muted border-transparent hover:text-fg hover:bg-panel-alt'}`}><Icon className="h-4 w-4" />{item.label}</Link>;
             })}
+            {account && <div className="flex items-center gap-2 text-sm text-muted"><span>{account.username}</span><button disabled={loading} className="border border-border rounded-lg px-3 py-2" onClick={() => { void logout().catch(error => toast.error(error.message)); }}>Sign out</button><button disabled={loading} className="px-2 py-2" onClick={() => { void logout(true).catch(error => toast.error(error.message)); }}>Sign out all devices</button></div>}
           </nav>
         </div>
       </header>

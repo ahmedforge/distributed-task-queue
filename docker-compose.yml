@@ -46,6 +46,8 @@ services:
       POSTGRES_DB: task_queue_db
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_ORIGIN: ${AUTH_ORIGIN:-}
       STORAGE_DIR: /app/data/jobs
       RETRY_BASE_DELAY: ${RETRY_BASE_DELAY:-2}
       RETRY_MAX_DELAY: ${RETRY_MAX_DELAY:-60}

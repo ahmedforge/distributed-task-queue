@@ -16,6 +16,9 @@ from fastapi import (
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
 from app.deletion import cleanup_job
+from app.auth import COOKIE, authenticated_account, current_user
+import time
+from app.models.account import Account
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
 from uuid import uuid4
@@ -32,7 +35,7 @@ from app.core.config import settings
 from app.core.storage import get_storage
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])
 
 
 @router.get("", response_model=JobListResponse)
@@ -42,9 +45,14 @@ async def list_jobs(
     page_size: int = Query(20, ge=1, le=100),
     job_status: JobStatus | None = Query(None, alias="status"),
     session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
 ):
-    statement = select(Job).where(Job.delete_pending == False)
-    count_statement = select(func.count(col(Job.id))).where(Job.delete_pending == False)
+    statement = select(Job).where(
+        Job.delete_pending == False, Job.owner_id == (account.id if account else None)
+    )
+    count_statement = select(func.count(col(Job.id))).where(
+        Job.delete_pending == False, Job.owner_id == (account.id if account else None)
+    )
     if job_status is not None:
         statement = statement.where(Job.status == job_status)
         count_statement = count_statement.where(Job.status == job_status)
@@ -73,6 +81,7 @@ async def upload_job(
     max_retries: int = Form(3, ge=1),
     idempotency_key: str | None = Form(None),
     session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
 ):
     filename = (file.filename or "").replace("\\", "/").split("/")[-1]
     if not filename.lower().endswith(".pdf") or len(filename) > 255:
@@ -82,7 +91,10 @@ async def upload_job(
     if idempotency_key:
         existing = (
             await session.exec(
-                select(Job).where(Job.idempotency_key == idempotency_key)
+                select(Job).where(
+                    Job.idempotency_key == idempotency_key,
+                    Job.owner_id == (account.id if account else None),
+                )
             )
         ).first()
         if existing:
@@ -112,6 +124,7 @@ async def upload_job(
                 raise HTTPException(400, "The PDF file is empty.")
 
         job = Job(
+            owner_id=account.id if account else None,
             filename=filename,
             max_retries=max_retries,
             idempotency_key=idempotency_key,
@@ -124,14 +137,22 @@ async def upload_job(
         statement = (
             pg_insert(Job)
             .values(**job.model_dump(exclude={"id"}))
-            .on_conflict_do_nothing(index_elements=["idempotency_key"])
+            .on_conflict_do_nothing(
+                index_elements=(
+                    ["owner_id", "idempotency_key"] if account else ["idempotency_key"]
+                ),
+                index_where=None if account else Job.owner_id.is_(None),
+            )
             .returning(Job.id)
         )
         inserted_id = (await session.exec(statement)).scalar_one_or_none()
         if inserted_id is None:
             existing = (
                 await session.exec(
-                    select(Job).where(Job.idempotency_key == idempotency_key)
+                    select(Job).where(
+                        Job.idempotency_key == idempotency_key,
+                        Job.owner_id == (account.id if account else None),
+                    )
                 )
             ).one_or_none()
             if existing is None or existing.delete_pending:
@@ -159,9 +180,17 @@ async def upload_job(
 
 
 @router.get("/{job_id}/result")
-async def download_result(job_id: int, session: AsyncSession = Depends(get_session)):
+async def download_result(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
     job = await session.get(Job, job_id)
-    if not job or job.delete_pending:
+    if (
+        not job
+        or job.delete_pending
+        or job.owner_id != (account.id if account else None)
+    ):
         raise HTTPException(404, "Job not found")
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(409, "The job has not completed.")
@@ -184,12 +213,18 @@ async def download_result(job_id: int, session: AsyncSession = Depends(get_sessi
 
 
 @router.get("/stats", response_model=JobStatsResponse)
-async def get_job_stats(session: AsyncSession = Depends(get_session)):
+async def get_job_stats(
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
     """Fetch aggregated job metrics across database and Redis queue."""
     # 1. Aggregate database counts by status
     statement = (
         select(Job.status, func.count(col(Job.id)))
-        .where(Job.delete_pending == False)
+        .where(
+            Job.delete_pending == False,
+            Job.owner_id == (account.id if account else None),
+        )
         .group_by(Job.status)
     )
     results = await session.exec(statement)
@@ -210,6 +245,7 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
             Job.status == JobStatus.COMPLETED,
             Job.updated_at >= first_minute,
             Job.delete_pending == False,
+            Job.owner_id == (account.id if account else None),
         )
         .group_by(minute)
     )
@@ -222,8 +258,12 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
         for index in range(15)
     ]
     try:
-        broker_counts = await asyncio.wait_for(queue_counts(queue), timeout=2)
-        queue_error = None
+        if account:
+            broker_counts = None
+            queue_error = None
+        else:
+            broker_counts = await asyncio.wait_for(queue_counts(queue), timeout=2)
+            queue_error = None
     except (RedisError, OSError, TimeoutError):
         broker_counts = None
         queue_error = (
@@ -231,6 +271,7 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
         )
 
     return JobStatsResponse(
+        queue_scope="account" if account else "operator",
         total_jobs=total_jobs,
         status_counts=status_counts,
         dlq_count=dlq_count,
@@ -248,26 +289,47 @@ async def get_job_stats(session: AsyncSession = Depends(get_session)):
 
 
 @router.get("/dlq", response_model=List[JobRead])
-async def list_dlq_jobs(session: AsyncSession = Depends(get_session)):
+async def list_dlq_jobs(
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
     statement = select(Job).where(
-        Job.status == JobStatus.FAILED, Job.delete_pending == False
+        Job.status == JobStatus.FAILED,
+        Job.delete_pending == False,
+        Job.owner_id == (account.id if account else None),
     )
     result = await session.exec(statement)
     return result.all()
 
 
 @router.get("/{job_id}", response_model=JobRead)
-async def get_job(job_id: int, session: AsyncSession = Depends(get_session)):
+async def get_job(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
     job = await session.get(Job, job_id)
-    if not job or job.delete_pending:
+    if (
+        not job
+        or job.delete_pending
+        or job.owner_id != (account.id if account else None)
+    ):
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
 @router.delete("/{job_id}")
-async def delete_job(job_id: int, session: AsyncSession = Depends(get_session)):
+async def delete_job(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
     job = (
-        await session.exec(select(Job).where(Job.id == job_id).with_for_update())
+        await session.exec(
+            select(Job)
+            .where(Job.id == job_id, Job.owner_id == (account.id if account else None))
+            .with_for_update()
+        )
     ).one_or_none()
     if not job:
         raise HTTPException(404, "Job not found")
@@ -285,12 +347,24 @@ async def delete_job(job_id: int, session: AsyncSession = Depends(get_session)):
 
 
 @router.post("/{job_id}/requeue", response_model=JobRead)
-async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_session)):
+async def requeue_failed_job(
+    job_id: int,
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
     # Serialize requeue claims until the FAILED -> PENDING change is committed.
     job = (
-        await session.exec(select(Job).where(Job.id == job_id).with_for_update())
+        await session.exec(
+            select(Job)
+            .where(Job.id == job_id, Job.owner_id == (account.id if account else None))
+            .with_for_update()
+        )
     ).one_or_none()
-    if not job or job.delete_pending:
+    if (
+        not job
+        or job.delete_pending
+        or job.owner_id != (account.id if account else None)
+    ):
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job.status != JobStatus.FAILED:
@@ -316,7 +390,15 @@ async def requeue_failed_job(job_id: int, session: AsyncSession = Depends(get_se
 
 
 @router.websocket("/{job_id}/ws")
-async def job_progress_websocket(websocket: WebSocket, job_id: int):
+async def job_progress_websocket(
+    websocket: WebSocket, job_id: int, account: Account = Depends(current_user)
+):
+    if account:
+        async with async_session_maker() as authorization_session:
+            owned = await authorization_session.get(Job, job_id)
+            if not owned or owned.delete_pending or owned.owner_id != account.id:
+                await websocket.close(code=1008)
+                return
     await websocket.accept()
     redis_client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2)
     pubsub = redis_client.pubsub()
@@ -328,7 +410,11 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int):
         await pubsub.subscribe(channel_name)
         async with async_session_maker() as session:
             job = await session.get(Job, job_id)
-        if not job or job.delete_pending:
+        if (
+            not job
+            or job.delete_pending
+            or job.owner_id != (account.id if account else None)
+        ):
             await websocket.send_json({"error": f"Job {job_id} not found"})
             close_code = 4004
             return
@@ -344,6 +430,7 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int):
             return
 
         last_updated = job.updated_at
+        checked_at = time.monotonic()
         receive_task = asyncio.create_task(websocket.receive())
         message_task = asyncio.create_task(
             pubsub.get_message(
@@ -356,6 +443,14 @@ async def job_progress_websocket(websocket: WebSocket, job_id: int):
                 [receive_task, message_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            if account and time.monotonic() - checked_at >= 15:
+                active_account = await authenticated_account(
+                    websocket.cookies.get(COOKIE, "")
+                )
+                if not active_account or active_account.id != account.id:
+                    close_code = 1008
+                    return
+                checked_at = time.monotonic()
             if receive_task in done:
                 if receive_task.result()["type"] == "websocket.disconnect":
                     return

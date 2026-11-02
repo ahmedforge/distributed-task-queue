@@ -18,12 +18,19 @@ cd distributed-task-queue
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up --build -d
 ```
 
-Open **http://localhost:3000**, choose a PDF, and select **Upload and Render**. Follow its progress, then download the ZIP. API docs: http://localhost:8001/docs. Grafana: http://localhost:3001 (initial local login: `admin` / `admin`).
+Open **http://localhost:3000**, create an account or sign in, choose a PDF, and select **Upload and Render**. Follow its progress, then download the ZIP. API docs: http://localhost:8001/docs. Grafana: http://localhost:3001 (initial local login: `admin` / `admin`).
 
 Defaults work without an `.env` file. Existing PostgreSQL volumes require their existing password. See [development setup and port configuration](docs/operations.md#run-locally-with-docker).
 
+## Accounts and private jobs
+
+Sign in to access your own uploads, results, retries, live progress, and job history across devices. The dashboard shows your job counts and completion history; broker-wide measurements remain in operator monitoring.
+
+Existing jobs are preserved, unowned and hidden until an operator explicitly assigns them. See [accounts, migration, API authentication and HTTPS settings](docs/accounts.md). Password recovery, public upload quotas, retention and hosted deployment remain separate work.
+
 ## What this demonstrates
 
+- **Account isolation:** private job access, per-account idempotency, revocable sessions, and origin/custom-header checks.
 - **Full-stack workflow:** upload validation, a paginated dashboard, failed-job management, live WebSocket progress with polling fallback, and ZIP downloads.
 - **Persistent job lifecycle:** PostgreSQL owns job state and dispatch intent; a recovery loop retries delivery when Redis is temporarily unavailable.
 - **Concurrency and recovery:** database-enforced submission idempotency, row locks for requeue/deletion, bounded retries with jitter, and interrupted-worker reconciliation.
@@ -66,4 +73,4 @@ The batch used one worker limited to 2 CPUs / 1 GiB. The crash check retained Re
 - [Image publishing](docs/image-publishing.md)
 - [Known limitations](docs/operations.md#known-limitations)
 
-This is a **local portfolio demo**. It has no authentication or document ownership isolation, no age-based retention, and no verified multi-node availability. Redis data loss and expired queue records remain recovery limits. Published image scan findings and their enforcement policy are [documented](docs/infrastructure-verification.md#published-release-verification--october-21-2026). Do not expose the upload service as an unrestricted public demo.
+This is a **local portfolio demo**. It includes account authentication and job ownership. Age-based retention, public upload quotas, password recovery, and verified multi-node availability remain outside its demonstrated scope. Redis data loss and expired queue records remain recovery limits. Published image scan findings and their enforcement policy are [documented](docs/infrastructure-verification.md#published-release-verification--october-21-2026). Do not expose the upload service as an unrestricted public demo.

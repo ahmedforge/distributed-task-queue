@@ -467,7 +467,19 @@ asyncio.run(main())"""
     async def run(self):
         try:
             await self.setup()
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(
+                timeout=30, headers={"X-DistribuQueue": "1"}
+            ) as client:
+                import secrets
+
+                credentials = {
+                    "username": "benchmark_" + secrets.token_hex(6),
+                    "password": secrets.token_urlsafe(24),
+                }
+                registered = await client.post(
+                    self.url + "/api/v1/account/register", json=credentials
+                )
+                registered.raise_for_status()
                 self.report["warmup"] = await self.load(client, "warmup", 3)
                 self.report["load"] = await self.load(client, "load", self.args.jobs)
                 self.report["crash"] = await self.crash(client)

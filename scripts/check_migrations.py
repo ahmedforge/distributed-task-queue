@@ -9,7 +9,7 @@ import asyncpg
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -62,6 +62,30 @@ async def verify_model_compatibility():
     await engine.dispose()
 
 
+async def seed_legacy_job():
+    async with engine.begin() as connection:
+        await connection.execute(
+            text(
+                "INSERT INTO job (filename,status,progress,retry_count,max_retries,idempotency_key,created_at,updated_at,dispatch_pending,delete_pending) VALUES ('legacy-migration.pdf','FAILED',12,1,3,'legacy-migration-key',now(),now(),false,false)"
+            )
+        )
+    await engine.dispose()
+
+
+async def verify_legacy_job():
+    async with async_session_maker() as session:
+        from sqlmodel import select
+
+        job = (
+            await session.exec(
+                select(Job).where(Job.idempotency_key == "legacy-migration-key")
+            )
+        ).one()
+        assert job.filename == "legacy-migration.pdf" and job.owner_id is None
+        assert job.progress == 12 and job.retry_count == 1
+    await engine.dispose()
+
+
 def main():
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "alembic"))
@@ -69,14 +93,17 @@ def main():
     if len(heads) != 1:
         raise RuntimeError(f"Expected one Alembic head, found {heads}")
     asyncio.run(create_disposable_database())
+    command.upgrade(config, "c3d4e5f6a7b8")
+    asyncio.run(seed_legacy_job())
     command.upgrade(config, "head")
+    asyncio.run(verify_legacy_job())
     asyncio.run(verify_model_compatibility())
     command.downgrade(config, "base")
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     asyncio.run(verify_model_compatibility())
     print(
-        "Migration checks passed: fresh upgrade, model compatibility, full rollback, re-upgrade."
+        "Migration checks passed: legacy data preservation, model compatibility, full rollback, re-upgrade."
     )
 
 

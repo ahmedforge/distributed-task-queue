@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    AUTH_COOKIE_SECURE: bool = False
+    AUTH_ORIGIN: str = ""
     PROJECT_NAME: str = "Distributed Task Queue"
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432

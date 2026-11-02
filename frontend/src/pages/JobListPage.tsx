@@ -55,7 +55,7 @@ export const JobListPage: React.FC<{ failedOnly?: boolean }> = ({ failedOnly = f
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           ['Total Jobs', stats?.total_jobs],
-          ['Waiting in Queue', stats?.queue_depth],
+          [stats?.queue_scope === 'account' ? 'Pending Jobs' : 'Waiting in Queue', stats?.queue_scope === 'account' ? stats.status_counts.PENDING : stats?.queue_depth],
           ['Processing', stats?.status_counts.PROCESSING],
           ['Failed Jobs', stats?.dlq_count],
         ].map(([label, value]) => (

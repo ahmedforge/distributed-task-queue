@@ -21,6 +21,7 @@ export interface JobListResponse {
 }
 
 export interface JobStatsResponse {
+  queue_scope: 'account' | 'operator';
   total_jobs: number;
   status_counts: Record<JobStatus, number>;
   dlq_count: number;
@@ -47,13 +48,21 @@ export class ApiError extends Error {
   }
 }
 
+export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  if (init.method && !['GET', 'HEAD', 'OPTIONS'].includes(init.method.toUpperCase())) headers.set('X-DistribuQueue', '1');
+  const res = await fetch(input, { ...init, headers, credentials: 'same-origin', cache: 'no-store' });
+  if (res.status === 401 && !String(input).includes('/account/login')) window.dispatchEvent(new Event('dtq:unauthorized'));
+  return res;
+}
+
 const API_BASE = '/api/v1/jobs';
 
 export const apiClient = {
   listJobs: async (page: number, status?: JobStatus): Promise<JobListResponse> => {
     const params = new URLSearchParams({ page: String(page), page_size: '20' });
     if (status) params.set('status', status);
-    const res = await fetch(`${API_BASE}?${params}`);
+    const res = await apiFetch(`${API_BASE}?${params}`);
     if (!res.ok) throw new Error('Failed to fetch jobs');
     return res.json();
   },
@@ -61,7 +70,7 @@ export const apiClient = {
     const form = new FormData();
     form.append('file', file);
     if (idempotencyKey) form.append('idempotency_key', idempotencyKey);
-    const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: form });
+    const res = await apiFetch(`${API_BASE}/upload`, { method: 'POST', body: form });
     if (!res.ok) {
       const error = await res.json().catch(() => null);
       throw new ApiError(typeof error?.detail === 'string' ? error.detail : error?.detail?.message || 'Failed to upload PDF', error?.detail?.job_id);
@@ -70,25 +79,25 @@ export const apiClient = {
   },
 
   getJobStats: async (): Promise<JobStatsResponse> => {
-    const res = await fetch(`${API_BASE}/stats`);
+    const res = await apiFetch(`${API_BASE}/stats`);
     if (!res.ok) throw new Error('Failed to fetch job stats');
     return res.json();
   },
 
   getDLQJobs: async (): Promise<JobRead[]> => {
-    const res = await fetch(`${API_BASE}/dlq`);
+    const res = await apiFetch(`${API_BASE}/dlq`);
     if (!res.ok) throw new Error('Failed to fetch DLQ jobs');
     return res.json();
   },
 
   getJob: async (jobId: number): Promise<JobRead> => {
-    const res = await fetch(`${API_BASE}/${jobId}`);
+    const res = await apiFetch(`${API_BASE}/${jobId}`);
     if (!res.ok) throw new Error('Failed to fetch job');
     return res.json();
   },
 
   deleteJob: async (jobId: number): Promise<{ job_id: number; cleanup_pending: boolean }> => {
-    const res = await fetch(`${API_BASE}/${jobId}`, { method: 'DELETE' });
+    const res = await apiFetch(`${API_BASE}/${jobId}`, { method: 'DELETE' });
     if (!res.ok) {
       const error = await res.json().catch(() => null);
       throw new ApiError(typeof error?.detail === 'string' ? error.detail : 'Failed to delete job');
@@ -97,7 +106,7 @@ export const apiClient = {
   },
 
   requeueJob: async (jobId: number): Promise<JobRead> => {
-    const res = await fetch(`${API_BASE}/${jobId}/requeue`, {
+    const res = await apiFetch(`${API_BASE}/${jobId}/requeue`, {
       method: 'POST',
     });
     if (!res.ok) {

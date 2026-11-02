@@ -107,7 +107,7 @@ export function useJobProgress(jobId: number) {
       current.onclose = (event) => {
         clearTimeout(connectTimer);
         if (stopped) return;
-        if (event.code === 4004) {
+        if (event.code === 4004 || event.code === 1008) {
           stopped = true;
           setConnection('idle');
           return;

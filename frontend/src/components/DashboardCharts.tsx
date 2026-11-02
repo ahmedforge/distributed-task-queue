@@ -16,6 +16,20 @@ export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsRes
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <section className="min-w-0 rounded-xl border border-border bg-panel p-4 sm:p-5">
+        {stats.queue_scope === 'account' ? <>
+          <h2 className="font-semibold">Your jobs by status</h2>
+          <p className="text-sm text-muted mt-1 mb-4">Saved jobs in your account, refreshed every 3 seconds.</p>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={Object.entries(stats.status_counts).map(([status, count]) => ({ status: status.charAt(0) + status.slice(1).toLowerCase(), count }))} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="status" tick={{ fill: 'var(--muted)', fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 11 }} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Bar dataKey="count" name="Your jobs" fill="var(--primary)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-muted mt-2">Pending includes jobs waiting for delivery or a retry. Operator queue metrics are separate.</p>
+        </> : <>
         <h2 className="font-semibold">Queue depth</h2>
         <p className="text-sm text-muted mt-1 mb-4">Samples since opening the dashboard. Waiting includes delayed retries.</p>
         {stats.queue_error && <p role="alert" className="text-sm text-danger mb-3">{stats.queue_error}</p>}
@@ -31,12 +45,13 @@ export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsRes
               <Line type="linear" dataKey="active" name="Active" stroke="var(--success)" strokeWidth={2} dot={{ r: 2 }} isAnimationActive={false} connectNulls={false} />
             </LineChart>
           </ResponsiveContainer>
-        ) : <PageState kind="empty" title="Waiting for queue metrics" description="Queue data will appear when Redis is available." />}
+        ) : <PageState kind="empty" title="Broker metrics are operator-only" description="Your job totals and completion history are shown on this dashboard." />}
         <p className="text-xs text-muted mt-2">Up to 60 samples, refreshed every 3 seconds. History resets on reload.</p>
+        </>}
       </section>
       <section className="min-w-0 rounded-xl border border-border bg-panel p-4 sm:p-5">
         <h2 className="font-semibold">Jobs completed per minute</h2>
-        <p className="text-sm text-muted mt-1 mb-4">Last 15 minutes from PostgreSQL. The current minute is still in progress.</p>
+        <p className="text-sm text-muted mt-1 mb-4">Your completions over the last 15 minutes. The current minute is still in progress.</p>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={stats.completed_per_minute} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />

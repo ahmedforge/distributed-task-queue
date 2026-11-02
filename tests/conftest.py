@@ -8,15 +8,19 @@ from sqlmodel import SQLModel
 from app.core.database import engine
 from app.core.queue import queue
 from app.main import app
+from app.auth import current_user
 
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_test_environment():
+    app.dependency_overrides[current_user] = lambda: None
     # 1. Setup DB Schema
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
     yield
+
+    app.dependency_overrides.pop(current_user, None)
 
     # 2. Teardown DB Schema & Connection Pool
     async with engine.begin() as conn:

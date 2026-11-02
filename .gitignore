@@ -24,3 +24,7 @@ data/
 *.tfvars.json
 terraform/cluster/kubeconfig
 crash.log
+
+# Local account API credentials and cookie jars
+credentials.json
+*dtq-cookies*

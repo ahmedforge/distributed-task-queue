@@ -116,7 +116,19 @@ async def verify(args):
                 pass
 
         drain_task = asyncio.create_task(drain_forward_output())
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(
+            timeout=60, headers={"X-DistribuQueue": "1"}
+        ) as client:
+            import secrets
+
+            registered = await client.post(
+                url + "/api/v1/account/register",
+                json={
+                    "username": "keda_" + secrets.token_hex(6),
+                    "password": secrets.token_urlsafe(24),
+                },
+            )
+            registered.raise_for_status()
             response = await client.get(url + "/")
             response.raise_for_status()
             assert "<html" in response.text.lower()
@@ -217,7 +229,15 @@ async def verify(args):
                                     + f"/api/v1/jobs/{ids[0]}/ws"
                                 )
                                 async with connect(
-                                    ws_url, open_timeout=20
+                                    ws_url,
+                                    open_timeout=20,
+                                    additional_headers={
+                                        "Cookie": "; ".join(
+                                            f"{k}={v}"
+                                            for k, v in client.cookies.items()
+                                        )
+                                    },
+                                    origin=url,
                                 ) as websocket:
                                     snapshot = json.loads(
                                         await asyncio.wait_for(

@@ -9,7 +9,7 @@ export function useJobStats() {
     queryKey: ['jobStats'], refetchInterval: 3000,
     queryFn: async () => {
       const stats = await apiClient.getJobStats();
-      client.setQueryData<QueueSample[]>(['queueHistory'], (history = []) => [
+      if (stats.queue_scope === 'operator') client.setQueryData<QueueSample[]>(['queueHistory'], (history = []) => [
         ...history, { time: stats.sampled_at, waiting: stats.queue_depth, active: stats.queue_counts?.active ?? null },
       ].slice(-60));
       return stats;

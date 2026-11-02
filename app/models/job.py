@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from sqlmodel import DateTime, Field, SQLModel
+from sqlalchemy import Index, UniqueConstraint, text
 
 
 class JobStatus(str, Enum):
@@ -12,6 +13,18 @@ class JobStatus(str, Enum):
 
 
 class Job(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_id", "idempotency_key", name="uq_job_owner_idempotency"
+        ),
+        Index(
+            "uq_job_legacy_idempotency",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("owner_id IS NULL"),
+        ),
+    )
+    owner_id: Optional[int] = Field(default=None, foreign_key="account.id", index=True)
     id: Optional[int] = Field(default=None, primary_key=True)
     filename: str
     status: JobStatus = Field(default=JobStatus.PENDING)
@@ -23,7 +36,7 @@ class Job(SQLModel, table=True):
 
     retry_count: int = Field(default=0)
     max_retries: int = Field(default=3)
-    idempotency_key: Optional[str] = Field(default=None, unique=True)
+    idempotency_key: Optional[str] = Field(default=None)
     error_message: Optional[str] = Field(default=None)
 
     created_at: datetime = Field(
