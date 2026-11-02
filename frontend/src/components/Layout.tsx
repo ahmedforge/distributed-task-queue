@@ -1,48 +1,44 @@
-import toast from 'react-hot-toast';
-import { useAuth } from '../auth-context';
 import React, { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Layers, PlusCircle, AlertTriangle, List, Moon, Sun } from 'lucide-react';
-import { Toaster } from 'react-hot-toast';
+import { ChevronDown, Moon, Sun } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
+import { useAuth } from '../auth-context';
 
 export const Layout: React.FC = () => {
   const location = useLocation();
   const { account, logout, loading } = useAuth();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    try { return localStorage.getItem('distribuqueue-theme') === 'light' ? 'light' : 'dark'; }
-    catch { return 'dark'; }
+    try { return localStorage.getItem('distribuqueue-theme') === 'dark' ? 'dark' : 'light'; }
+    catch { return 'light'; }
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('distribuqueue-theme', theme); } catch { /* Storage may be disabled. */ }
   }, [theme]);
-  const navItems = [
-    { path: '/', label: 'Job Dashboard', icon: List },
-    { path: '/submit', label: 'Submit PDF Job', icon: PlusCircle },
-    { path: '/dlq', label: 'Failed Jobs', icon: AlertTriangle },
-  ];
-  return (
-    <div className="min-h-screen bg-surface text-fg flex flex-col">
-      <Toaster position="top-right" toastOptions={{ duration: 6000, style: { background: 'var(--panel)', color: 'var(--fg)', border: '1px solid var(--border)' } }} />
-      <header className="border-b border-border bg-panel">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center justify-between gap-4">
-            <Link to="/" className="flex items-center gap-3 font-bold text-lg tracking-wide"><Layers className="h-6 w-6 text-primary" />DistribuQueue</Link>
-            <button aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} className="p-2 rounded-lg border border-border hover:bg-panel-alt" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+  return <div className="min-h-screen flex flex-col">
+    <Toaster position="bottom-right" toastOptions={{ duration: 6000, style: { background: 'var(--panel)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13 } }} />
+    <header className="masthead">
+      <div className="shell">
+        <div className="masthead-row">
+          <Link to="/" className="wordmark"><span className="queue-mark" aria-hidden="true"><i /><i /><i /></span>DistribuQueue</Link>
+          <div className="header-tools">
+            {account && <details className="account-menu" key={location.pathname}>
+              <summary aria-label={`Account: ${account.username}`}><span className="account-name">{account.username}</span><ChevronDown size={13} aria-hidden="true" /></summary>
+              <div className="account-options">
+                <button disabled={loading} onClick={() => { void logout().catch(error => toast.error(error.message)); }}>Sign out</button>
+                <button disabled={loading} onClick={() => { void logout(true).catch(error => toast.error(error.message)); }}>Sign out all devices</button>
+              </div>
+            </details>}
+            <button aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`} className="icon-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
           </div>
-          <nav aria-label="Main navigation" className="flex flex-wrap gap-2">
-            {account && navItems.map((item) => {
-              const Icon = item.icon;
-              const active = location.pathname === item.path;
-              return <Link key={item.path} to={item.path} aria-current={active ? 'page' : undefined} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${active ? 'bg-panel-alt text-primary border-border' : 'text-muted border-transparent hover:text-fg hover:bg-panel-alt'}`}><Icon className="h-4 w-4" />{item.label}</Link>;
-            })}
-            {account && <div className="flex items-center gap-2 text-sm text-muted"><span>{account.username}</span><button disabled={loading} className="border border-border rounded-lg px-3 py-2" onClick={() => { void logout().catch(error => toast.error(error.message)); }}>Sign out</button><button disabled={loading} className="px-2 py-2" onClick={() => { void logout(true).catch(error => toast.error(error.message)); }}>Sign out all devices</button></div>}
-          </nav>
         </div>
-      </header>
-      <main className="flex-1 min-w-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8"><Outlet /></main>
-    </div>
-  );
+        {account && <nav aria-label="Main navigation" className="navigation">
+          {[['/', 'Jobs'], ['/submit', 'Upload'], ['/dlq', 'Failed']].map(([path, label]) => <Link key={path} to={path} aria-current={location.pathname === path || (path === '/' && location.pathname.startsWith('/jobs/')) ? 'page' : undefined}>{label}</Link>)}
+        </nav>}
+      </div>
+    </header>
+    <main className="shell workspace flex-1 w-full"><Outlet /></main>
+  </div>;
 };

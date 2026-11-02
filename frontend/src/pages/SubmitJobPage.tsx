@@ -28,43 +28,21 @@ export const SubmitJobPage: React.FC = () => {
     }
   };
 
-  return (
-    <div className="max-w-md mx-auto bg-panel p-6 rounded-lg border border-border">
-      <h2 className="text-xl font-bold mb-4">Submit PDF Render Task</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="pdf-file" className="block text-sm text-muted mb-1">PDF file</label>
-          <input
-            id="pdf-file"
-            type="file"
-            accept="application/pdf,.pdf"
-            className="w-full bg-panel border border-border rounded px-3 py-2 text-fg"
-            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setError(''); setFailedJobId(undefined); }}
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="idempotency-key" className="block text-sm text-muted mb-1">Idempotency Key (Optional)</label>
-          <input
-            id="idempotency-key"
-            type="text"
-            className="w-full bg-panel border border-border rounded px-3 py-2 text-fg"
-            value={idempotencyKey}
-            onChange={(e) => setIdempotencyKey(e.target.value)}
-            placeholder="unique-uuid-key"
-          />
-        </div>
-        {error && <PageState kind="error" title="Upload could not finish" description={error} action={failedJobId ? <Link to={`/jobs/${failedJobId}`} className="text-primary hover:underline">Open saved job #{failedJobId} to retry</Link> : undefined} />}
-        {submitting && <p role="status" className="text-muted">Uploading your PDF. Processing begins after the upload finishes.</p>}
-        <p className="text-sm text-muted">Up to 20 MiB and 50 pages. Downloads contain one PNG per page.</p>
-        <button
-          disabled={submitting || !file}
-          type="submit"
-          className="w-full bg-indigo-600 hover:bg-indigo-500 py-2 rounded font-semibold text-white transition-colors disabled:opacity-50"
-        >
-          {submitting ? 'Uploading...' : 'Upload and Render'}
-        </button>
-      </form>
-    </div>
-  );
+  return <div className="upload-layout">
+    <div className="page-heading"><div><h1>Upload a PDF</h1><p>Each page is rendered as a PNG and bundled into a ZIP.</p></div></div>
+    <form onSubmit={handleSubmit} className="form-panel">
+      <label htmlFor="pdf-file" className="form-label">Document</label>
+      <div className="file-field"><input id="pdf-file" type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] ?? null); setError(''); setFailedJobId(undefined); }} required aria-describedby="file-help" /></div>
+      <p id="file-help" className="field-note mb-6">PDF files only. Up to 20 MiB and 50 pages. Encrypted PDFs aren't supported.</p>
+      <details className="form-advanced"><summary>Duplicate submission protection</summary>
+        <label htmlFor="idempotency-key" className="form-label">Submission key <span className="text-muted font-normal">(optional)</span></label>
+        <input id="idempotency-key" className="field" value={idempotencyKey} onChange={e => setIdempotencyKey(e.target.value)} aria-describedby="key-help" />
+        <p id="key-help" className="field-note">Reuse a key to return the same saved job instead of uploading it twice. Use a new key for a different document.</p>
+      </details>
+      {error && <div className="mt-5"><PageState kind="error" title="Upload could not finish" description={error} action={failedJobId ? <Link to={`/jobs/${failedJobId}`} className="text-link">Open saved job #{failedJobId}</Link> : undefined} /></div>}
+      {submitting && <p role="status" className="field-note mt-5">Uploading your document…</p>}
+      <div className="form-footer"><p>Processing continues after you leave this page.</p><button disabled={submitting || !file} type="submit" className="button button-primary">{submitting ? 'Uploading…' : 'Upload & render'}</button></div>
+    </form>
+    <Link to="/" className="breadcrumb mt-5">← Back to jobs</Link>
+  </div>;
 };

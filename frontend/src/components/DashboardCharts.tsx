@@ -6,7 +6,7 @@ import { PageState } from './PageState';
 
 const timeLabel = (value: string) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const minuteLabel = (value: string) => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const tooltipStyle = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--fg)' };
+const tooltipStyle = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--fg)' };
 
 export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsResponse; loading: boolean; error: Error | null }) {
   const { data: history = [] } = useQuery<QueueSample[]>({
@@ -15,7 +15,7 @@ export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsRes
   if (!stats) return <PageState kind={loading ? 'loading' : 'error'} title={loading ? 'Loading metrics' : 'Metrics unavailable'} description={error ? 'Check the API connection. Metrics will refresh automatically.' : undefined} />;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <section className="min-w-0 rounded-xl border border-border bg-panel p-4 sm:p-5">
+      <section className="chart-panel">
         {stats.queue_scope === 'account' ? <>
           <h2 className="font-semibold">Your jobs by status</h2>
           <p className="text-sm text-muted mt-1 mb-4">Saved jobs in your account, refreshed every 3 seconds.</p>
@@ -25,7 +25,7 @@ export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsRes
               <XAxis dataKey="status" tick={{ fill: 'var(--muted)', fontSize: 11 }} />
               <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 11 }} />
               <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="count" name="Your jobs" fill="var(--primary)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="count" name="Your jobs" fill="var(--primary)" radius={[1, 1, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
           <p className="text-xs text-muted mt-2">Pending includes jobs waiting for delivery or a retry. Operator queue metrics are separate.</p>
@@ -49,7 +49,7 @@ export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsRes
         <p className="text-xs text-muted mt-2">Up to 60 samples, refreshed every 3 seconds. History resets on reload.</p>
         </>}
       </section>
-      <section className="min-w-0 rounded-xl border border-border bg-panel p-4 sm:p-5">
+      <section className="chart-panel">
         <h2 className="font-semibold">Jobs completed per minute</h2>
         <p className="text-sm text-muted mt-1 mb-4">Your completions over the last 15 minutes. The current minute is still in progress.</p>
         <ResponsiveContainer width="100%" height={220}>
@@ -58,7 +58,7 @@ export function DashboardCharts({ stats, loading, error }: { stats?: JobStatsRes
             <XAxis dataKey="minute" tickFormatter={minuteLabel} minTickGap={30} tick={{ fill: 'var(--muted)', fontSize: 11 }} />
             <YAxis allowDecimals={false} tick={{ fill: 'var(--muted)', fontSize: 11 }} />
             <Tooltip labelFormatter={(label) => minuteLabel(String(label))} contentStyle={tooltipStyle} />
-            <Bar dataKey="completed" name="Completed jobs" fill="var(--primary)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Bar dataKey="completed" name="Completed jobs" fill="var(--primary)" radius={[1, 1, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
         {!stats.completed_per_minute.some((point) => point.completed) && <p className="text-xs text-muted mt-2">No jobs completed in this window.</p>}

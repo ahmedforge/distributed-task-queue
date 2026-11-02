@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect } from 'react';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useJobStats } from '../hooks/useJobStats';
@@ -12,6 +12,7 @@ const statuses: JobStatus[] = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'];
 
 export const JobListPage: React.FC<{ failedOnly?: boolean }> = ({ failedOnly = false }) => {
   const [params, setParams] = useSearchParams();
+  const [activityOpen, setActivityOpen] = useState(false);
   const requestedPage = Number(params.get('page') || 1);
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const requestedStatus = params.get('status') as JobStatus | null;
@@ -46,91 +47,50 @@ export const JobListPage: React.FC<{ failedOnly?: boolean }> = ({ failedOnly = f
     setParams(updated);
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">{failedOnly ? 'Failed Jobs' : 'Job Dashboard'}</h1>
-        <Link to="/submit" className="rounded bg-indigo-600 text-white px-4 py-2">Upload PDF</Link>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          ['Total Jobs', stats?.total_jobs],
-          [stats?.queue_scope === 'account' ? 'Pending Jobs' : 'Waiting in Queue', stats?.queue_scope === 'account' ? stats.status_counts.PENDING : stats?.queue_depth],
-          ['Processing', stats?.status_counts.PROCESSING],
-          ['Failed Jobs', stats?.dlq_count],
-        ].map(([label, value]) => (
-          <div key={label} className="p-4 bg-panel border border-border rounded-lg">
-            <p className="text-sm text-muted">{label}</p>
-            <p className="text-3xl font-bold mt-1">{value ?? '—'}</p>
-          </div>
-        ))}
-      </div>
-      {statsError && <p role="alert" className="text-danger">Unable to load job counts.</p>}
-      {!failedOnly && <Suspense fallback={<PageState kind="loading" title="Loading charts" />}><DashboardCharts stats={stats} loading={statsLoading} error={statsError} /></Suspense>}
-      {!failedOnly && (
-        <label className="flex items-center gap-3">
-          Status
-          <select className="rounded bg-panel-alt border border-border px-3 py-2" value={status ?? ''} onChange={(event) => {
-            const updated = new URLSearchParams(params);
-            updated.set('page', '1');
-            if (event.target.value) updated.set('status', event.target.value);
-            else updated.delete('status');
-            setParams(updated);
-          }}>
-            <option value="">All statuses</option>
-            {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
-      )}
-      {failedOnly && <p className="text-muted">Review errors and retry jobs after addressing the cause.</p>}
-      {isLoading && <PageState kind="loading" title="Loading jobs" description="Fetching the latest job states." />}
-      {error && <PageState kind="error" title="Unable to refresh jobs" description="Check the API connection. Previously loaded jobs remain below." />}
-      {requeue.error && <p role="alert" className="text-danger">Could not requeue this job. Refresh its details and try again.</p>}
-      {data && (
-        <>
-          {data.items.length === 0 ? (
-            <PageState kind="empty" title={status ? 'No jobs with this status' : 'No jobs yet'} description={failedOnly ? 'Failed jobs will appear here with their error details.' : 'Upload a PDF to start rendering pages.'} action={<Link to="/submit" className="text-primary hover:underline">Upload a PDF</Link>} />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-border">
-              <table className="w-full text-left text-sm">
-                <caption className="sr-only">Jobs, newest first</caption>
-                <thead className="bg-panel-alt text-muted">
-                  <tr>{['Job', 'Status', 'Progress', 'Failed attempts', 'Created', 'Actions'].map((heading) => <th key={heading} scope="col" className="p-3">{heading}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {data.items.map((job) => (
-                    <tr key={job.id} className="border-t border-border align-top">
-                      <td className="p-3 max-w-xs">
-                        <Link to={`/jobs/${job.id}`} className="text-primary hover:underline break-all">#{job.id} {job.filename}</Link>
-                        {job.error_message && <p className="mt-1 text-danger break-words">{job.error_message}</p>}
-                      </td>
-                      <td className="p-3"><StatusBadge status={job.status} /></td>
-                      <td className="p-3">
-                        <progress aria-label={`Job ${job.id} progress`} max={100} value={job.progress} className="w-24" />
-                        <p>{job.progress}%</p>
-                      </td>
-                      <td className="p-3">{job.retry_count} / {job.max_retries}</td>
-                      <td className="p-3 whitespace-nowrap"><time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time></td>
-                      <td className="p-3 space-y-2">
-                        <Link to={`/jobs/${job.id}`} className="block text-primary hover:underline">Details</Link>
-                        {job.status === 'COMPLETED' && <a href={`/api/v1/jobs/${job.id}/result`} className="block text-primary hover:underline">Download ZIP</a>}
-                        {job.status === 'FAILED' && <button aria-label={`Retry job ${job.id}`} disabled={requeue.isPending} className="rounded bg-indigo-600 text-white px-3 py-1 disabled:opacity-50" onClick={() => requeue.mutate(job.id)}>{requeue.isPending && requeue.variables === job.id ? 'Requeueing...' : 'Retry'}</button>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">{data.total} matching jobs · Page {page} of {totalPages}</p>
-            <div className="flex gap-2">
-              <button disabled={page <= 1} className="rounded bg-panel-alt px-3 py-2 disabled:opacity-40" onClick={() => changePage(page - 1)}>Previous</button>
-              <button disabled={page >= totalPages} className="rounded bg-panel-alt px-3 py-2 disabled:opacity-40" onClick={() => changePage(page + 1)}>Next</button>
-            </div>
-          </div>
-        </>
-      )}
+  return <div>
+    <div className="page-heading">
+      <div><h1>{failedOnly ? 'Failed jobs' : 'Jobs'}</h1><p>{failedOnly ? 'Review errors and retry after fixing the cause.' : 'PDF rendering jobs in your account.'}</p></div>
+      <Link to="/submit" className="button button-primary">Upload PDF <span aria-hidden="true">↗</span></Link>
     </div>
-  );
+    <div className="stats-strip" aria-label="Job summary">
+      {[
+        ['Total jobs', stats?.total_jobs],
+        [stats?.queue_scope === 'account' ? 'Pending' : 'Waiting', stats?.queue_scope === 'account' ? stats.status_counts.PENDING : stats?.queue_depth],
+        ['Processing', stats?.status_counts.PROCESSING],
+        ['Failed', stats?.dlq_count],
+      ].map(([label, value]) => <div key={label} className="stat"><p className="stat-label">{label}</p><p className="stat-value">{value ?? '—'}</p></div>)}
+    </div>
+    {statsError && <p role="alert" className="notice">Unable to load job counts.</p>}
+    <div className="job-toolbar">
+      <span className="text-xs text-muted">{data ? `${data.total} ${data.total === 1 ? 'job' : 'jobs'}` : 'Loading…'} · newest first</span>
+      {!failedOnly && <label>Status<select value={status ?? ''} onChange={(event) => {
+        const updated = new URLSearchParams(params); updated.set('page', '1');
+        if (event.target.value) updated.set('status', event.target.value); else updated.delete('status');
+        setParams(updated);
+      }}><option value="">All statuses</option>{statuses.map(item => <option key={item} value={item}>{item.charAt(0) + item.slice(1).toLowerCase()}</option>)}</select></label>}
+    </div>
+    {isLoading && <PageState kind="loading" title="Loading jobs" description="Fetching the latest job states." />}
+    {error && <PageState kind="error" title="Unable to refresh jobs" description="Check the API connection. Previously loaded jobs remain below." />}
+    {requeue.error && <p role="alert" className="notice">Could not retry this job. Refresh its details and try again.</p>}
+    {data && <>
+      {data.items.length === 0 ? <PageState kind="empty" title={status ? 'No jobs with this status' : 'No jobs yet'} description={failedOnly ? 'Jobs that need attention will appear here.' : status ? 'No jobs currently match this filter.' : 'Upload a PDF to render each page as a PNG.'} action={!status ? <Link to="/submit" className="text-link text-sm">Upload your first PDF</Link> : undefined} /> :
+        <div className="table-frame" tabIndex={0} role="region" aria-label="Job list, scroll to view all columns"><table className="jobs-table">
+          <caption className="sr-only">Jobs, newest first</caption>
+          <thead><tr>{['Document', 'Status', 'Progress', 'Failed attempts', 'Created', ''].map(heading => <th key={heading} scope="col">{heading || <span className="sr-only">Actions</span>}</th>)}</tr></thead>
+          <tbody>{data.items.map(job => <tr key={job.id}>
+            <td><Link to={`/jobs/${job.id}`} className="file-name">{job.filename}</Link><span className="job-reference">#{String(job.id).padStart(4, '0')}</span></td>
+            <td><StatusBadge status={job.status} /></td>
+            <td><div className="w-20"><progress aria-label={`Job ${job.id} progress`} max={100} value={job.progress} /><span className="numeric block mt-1">{job.progress}%</span></div></td>
+            <td className="numeric">{job.retry_count} / {job.max_retries}</td>
+            <td className="text-muted whitespace-nowrap text-xs"><time dateTime={job.created_at}>{new Date(job.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}<span className="block numeric mt-1">{new Date(job.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></time></td>
+            <td><div className="job-actions"><Link to={`/jobs/${job.id}`}>View<span className="sr-only"> job {job.id}</span></Link>
+              {job.status === 'COMPLETED' && <a href={`/api/v1/jobs/${job.id}/result`}>ZIP<span className="sr-only"> for job {job.id}</span> ↓</a>}
+              {job.status === 'FAILED' && <button aria-label={`Retry job ${job.id}`} disabled={requeue.isPending} onClick={() => requeue.mutate(job.id)}>{requeue.isPending && requeue.variables === job.id ? 'Retrying…' : 'Retry'}</button>}
+            </div></td>
+          </tr>)}</tbody>
+        </table></div>}
+      <div className="table-footer"><span>Page {page} of {totalPages}</span><div className="flex gap-2"><button disabled={page <= 1} className="button" onClick={() => changePage(page - 1)}>Previous</button><button disabled={page >= totalPages} className="button" onClick={() => changePage(page + 1)}>Next</button></div></div>
+    </>}
+    {!failedOnly && <details className="activity-section" onToggle={event => setActivityOpen(event.currentTarget.open)}><summary>Activity · last 15 minutes</summary>{activityOpen && <Suspense fallback={<PageState kind="loading" title="Loading activity" />}><DashboardCharts stats={stats} loading={statsLoading} error={statsError} /></Suspense>}</details>}
+  </div>;
 };

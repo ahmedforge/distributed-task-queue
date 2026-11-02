@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -37,39 +37,25 @@ export const JobDetailPage: React.FC = () => {
   if (isLoading) return <PageState kind="loading" title="Loading job" description="Connecting to progress updates." />;
   if (!job) return <PageState kind="error" title="Unable to load this job" description="Check the job ID and API connection." />;
 
-  return (
-    <div className="space-y-4 rounded-xl border border-border bg-panel p-5 sm:p-8">
-      <h1 className="text-2xl font-bold break-words">Job #{job.id}: {job.filename}</h1>
-      <p>Status: <StatusBadge status={job.status} /></p>
-      {job.status !== 'COMPLETED' && job.status !== 'FAILED' && (
-        <p role="status" className="text-sm text-muted">
-          {connection === 'live' ? 'Live updates connected' : 'Reconnecting to live updates; refreshing status automatically'}
-        </p>
-      )}
-      {error && <p role="alert" className="text-danger">Unable to refresh status. Showing the last known state.</p>}
-      <progress className="w-full" max={100} value={job.progress} aria-label="Rendering progress" />
-      <p>{job.progress}% processed</p>
-      <p>Failed attempts: {job.retry_count} / {job.max_retries}</p>
-      {job.error_message && <p role="alert" className="text-danger">{job.error_message}</p>}
-      {job.status === 'COMPLETED' && (
-        <a className="inline-block bg-indigo-600 text-white px-4 py-2 rounded" href={`/api/v1/jobs/${job.id}/result`}>
-          Download rendered pages (ZIP)
-        </a>
-      )}
-      {job.status === 'FAILED' && (
-        <button className="bg-indigo-600 text-white px-4 py-2 rounded" disabled={requeue.isPending || deletion.isPending} onClick={() => requeue.mutate()}>
-          {requeue.isPending ? 'Requeueing...' : 'Retry job'}
-        </button>
-      )}
-      {requeue.error && <p role="alert">{requeue.error.message}</p>}
-      {(job.status === 'COMPLETED' || job.status === 'FAILED') && (
-        <button className="block rounded border border-danger px-4 py-2 text-danger disabled:opacity-50" disabled={deletion.isPending || requeue.isPending} onClick={() => {
-          if (window.confirm('Delete this job, its original PDF, and all rendered files? This cannot be undone.')) deletion.mutate();
-        }}>
-          {deletion.isPending ? 'Deleting...' : 'Delete job and files'}
-        </button>
-      )}
-      {deletion.error && <p role="alert" className="text-danger">{deletion.error.message}</p>}
+  return <div className="detail-layout">
+    <Link to="/" className="breadcrumb">← All jobs</Link>
+    <div className="page-heading"><div><p className="job-reference mb-2">JOB #{String(job.id).padStart(4, '0')}</p><h1>{job.filename}</h1></div>
+      {job.status === 'COMPLETED' && <a className="button button-primary" href={`/api/v1/jobs/${job.id}/result`}>Download ZIP ↓</a>}
+      {job.status === 'FAILED' && <button className="button button-primary" disabled={requeue.isPending || deletion.isPending} onClick={() => requeue.mutate()}>{requeue.isPending ? 'Retrying…' : 'Retry job'}</button>}
     </div>
-  );
+    <div className="form-panel">
+      <div className="detail-progress"><StatusBadge status={job.status} /><span className="numeric">{job.progress}%</span></div>
+      <progress max={100} value={job.progress} aria-label="Rendering progress" />
+      <dl className="detail-meta"><div><dt>Created</dt><dd><time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time></dd></div><div><dt>Failed attempts</dt><dd>{job.retry_count} / {job.max_retries}</dd></div><div><dt>Last updated</dt><dd><time dateTime={job.updated_at}>{new Date(job.updated_at).toLocaleTimeString()}</time></dd></div></dl>
+      {job.status !== 'COMPLETED' && job.status !== 'FAILED' && <p role="status" className="field-note">{connection === 'live' ? 'Receiving live progress updates.' : 'Reconnecting. Status refreshes automatically.'}</p>}
+      {job.status === 'COMPLETED' && <p className="field-note">All pages have been rendered. Your ZIP is ready to download.</p>}
+      {error && <p role="alert" className="notice">Unable to refresh status. Showing the last known state.</p>}
+      {job.error_message && <p role="alert" className="notice">{job.error_message}</p>}
+      {requeue.error && <p role="alert" className="notice">{requeue.error.message}</p>}
+    </div>
+    {(job.status === 'COMPLETED' || job.status === 'FAILED') && <div className="form-footer"><p>Delete the original PDF, rendered files, and job record.</p><button className="button button-danger" disabled={deletion.isPending || requeue.isPending} onClick={() => {
+      if (window.confirm('Delete this job, its original PDF, and all rendered files? This cannot be undone.')) deletion.mutate();
+    }}>{deletion.isPending ? 'Deleting…' : 'Delete job'}</button></div>}
+    {deletion.error && <p role="alert" className="notice mt-4">{deletion.error.message}</p>}
+  </div>;
 };
