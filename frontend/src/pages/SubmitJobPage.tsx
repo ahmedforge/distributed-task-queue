@@ -1,3 +1,4 @@
+import { AccountUsage } from '../components/AccountUsage';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageState } from '../components/PageState';
@@ -30,6 +31,7 @@ export const SubmitJobPage: React.FC = () => {
 
   return <div className="upload-layout">
     <div className="page-heading"><div><h1>Upload a PDF</h1><p>Each page is rendered as a PNG and bundled into a ZIP.</p></div></div>
+    <AccountUsage upload />
     <form onSubmit={handleSubmit} className="form-panel">
       <label htmlFor="pdf-file" className="form-label">Document</label>
       <div className="file-field"><input id="pdf-file" type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] ?? null); setError(''); setFailedJobId(undefined); }} required aria-describedby="file-help" /></div>

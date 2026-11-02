@@ -83,6 +83,8 @@ async def verify_legacy_job():
         ).one()
         assert job.filename == "legacy-migration.pdf" and job.owner_id is None
         assert job.progress == 12 and job.retry_count == 1
+        assert job.expires_at is None and job.retention_days is None
+        assert job.input_bytes is None and job.result_bytes is None
     await engine.dispose()
 
 

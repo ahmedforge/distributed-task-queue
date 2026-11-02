@@ -26,7 +26,7 @@ Defaults work without an `.env` file. Existing PostgreSQL volumes require their 
 
 Sign in to access your own uploads, results, retries, live progress, and job history across devices. The dashboard shows your job counts and completion history; broker-wide measurements remain in operator monitoring.
 
-Existing jobs are preserved, unowned and hidden until an operator explicitly assigns them. See [accounts, migration, API authentication and HTTPS settings](docs/accounts.md). Password recovery, public upload quotas, retention and hosted deployment remain separate work.
+Existing jobs are preserved, unowned and hidden until an operator explicitly assigns them. See [accounts, migration, API authentication and HTTPS settings](docs/accounts.md). Per-account admission budgets and automatic expiry for new jobs are implemented; see [limits and safe upgrade](docs/resource-limits.md). Password recovery and hosted deployment remain separate work.
 
 ## What this demonstrates
 
@@ -73,4 +73,4 @@ The batch used one worker limited to 2 CPUs / 1 GiB. The crash check retained Re
 - [Image publishing](docs/image-publishing.md)
 - [Known limitations](docs/operations.md#known-limitations)
 
-This is a **local portfolio demo**. It includes account authentication and job ownership. Age-based retention, public upload quotas, password recovery, and verified multi-node availability remain outside its demonstrated scope. Redis data loss and expired queue records remain recovery limits. Published image scan findings and their enforcement policy are [documented](docs/infrastructure-verification.md#published-release-verification--october-21-2026). Do not expose the upload service as an unrestricted public demo.
+This is a **local portfolio demo**. It includes account authentication and job ownership. Per-account active/storage budgets and new-job expiry are implemented. Password recovery, global traffic protection, and verified multi-node availability remain outside its demonstrated scope. Redis data loss and expired queue records remain recovery limits. Published image scan findings and their enforcement policy are [documented](docs/infrastructure-verification.md#published-release-verification--october-21-2026). Do not expose the upload service as an unrestricted public demo.

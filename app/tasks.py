@@ -1,13 +1,14 @@
 import asyncio
 import logging
 from time import perf_counter
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict
 from sqlmodel import select
 
 import redis.asyncio as aioredis
 
 from app.core.config import settings
+from app.core.storage import get_storage
 from app.core.database import async_session_maker
 from app.models.job import Job, JobStatus
 from app.schemas.job import JobProgressUpdate
@@ -22,6 +23,14 @@ async def report_progress(session, job: Job, progress: int, status: JobStatus):
     job.progress = progress
     job.status = status
     job.updated_at = datetime.now(timezone.utc)
+    if status in (JobStatus.COMPLETED, JobStatus.FAILED):
+        job.expires_at = (
+            job.updated_at + timedelta(days=job.retention_days)
+            if job.retention_days
+            else None
+        )
+    else:
+        job.expires_at = None
     session.add(job)
     await session.commit()
 
@@ -74,6 +83,9 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
         # A worker receipt resolves a lost enqueue acknowledgement, even if
         # the dispatcher died before clearing its database delivery marker.
         job.dispatch_pending = False
+        job.result_reserved_bytes = max(
+            job.result_reserved_bytes, job.result_limit_bytes
+        )
 
         queued_attempt = ctx.get("job")
         if queued_attempt:
@@ -91,7 +103,15 @@ async def process_pdf_render(ctx: Dict[str, Any], **kwargs: Any):
                 async def on_progress(progress: int):
                     await report_progress(session, job, progress, JobStatus.PROCESSING)
 
-                await render_pdf(job_id, on_progress)
+                result_size = await render_pdf(
+                    job_id, on_progress, max_result_bytes=job.result_limit_bytes
+                )
+                job.result_bytes = result_size
+                job.result_reserved_bytes = 0
+                if job.input_bytes is None:
+                    job.input_bytes = await asyncio.to_thread(
+                        get_storage().size, job_id, "input.pdf"
+                    )
 
                 # 3. Mark job as COMPLETED
                 job.error_message = None

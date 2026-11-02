@@ -89,8 +89,18 @@ class Benchmark:
             "REDIS_HOST=redis",
             "REDIS_PORT=6379",
             "STORAGE_DIR=/app/data/jobs",
+            "ACCOUNT_MAX_ACTIVE_JOBS=1000",
+            "ACCOUNT_MAX_STORED_JOBS=2000",
+            "ACCOUNT_MAX_STORAGE_BYTES=214748364800",
         ]
-        self.report = {"started_at_utc": datetime.now(timezone.utc).isoformat()}
+        self.report = {
+            "started_at_utc": datetime.now(timezone.utc).isoformat(),
+            "admission_limits": {
+                "active_jobs": 1000,
+                "retained_jobs": 2000,
+                "storage_bytes": 214748364800,
+            },
+        }
 
     async def run_app(self, name, *extra):
         env = [argument for value in self.env for argument in ("-e", value)]

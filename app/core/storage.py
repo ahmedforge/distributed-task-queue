@@ -26,9 +26,16 @@ class Storage(Protocol):
     def put(self, job_id: int, name: Artifact, source: Path) -> None: ...
     def fetch(self, job_id: int, name: Artifact, destination: Path) -> None: ...
     def delete_job(self, job_id: int) -> None: ...
+    def size(self, job_id: int, name: Artifact) -> int: ...
 
 
 class LocalStorage:
+    def size(self, job_id: int, name: Artifact) -> int:
+        try:
+            return (job_directory(job_id) / name).stat().st_size
+        except FileNotFoundError:
+            return 0
+
     def put(self, job_id: int, name: Artifact, source: Path) -> None:
         destination = job_directory(job_id) / name
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -72,6 +79,20 @@ class S3Storage:
             ),
         )
         self.bucket = settings.S3_BUCKET
+
+    def size(self, job_id: int, name: Artifact) -> int:
+        from botocore.exceptions import ClientError
+
+        try:
+            return int(
+                self.client.head_object(
+                    Bucket=self.bucket, Key=f"{int(job_id)}/{name}"
+                )["ContentLength"]
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] in ("404", "NoSuchKey", "NotFound"):
+                return 0
+            raise
 
     def put(self, job_id: int, name: Artifact, source: Path) -> None:
         # Single PUT avoids abandoned multipart uploads when workers are killed.

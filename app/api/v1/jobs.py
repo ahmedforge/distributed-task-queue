@@ -19,6 +19,7 @@ from app.deletion import cleanup_job
 from app.auth import COOKIE, authenticated_account, current_user
 import time
 from app.models.account import Account
+from app.limits import admit, expired, lock_account, unexpired, usage
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import col, func, select
 from uuid import uuid4
@@ -48,10 +49,14 @@ async def list_jobs(
     account: Account = Depends(current_user),
 ):
     statement = select(Job).where(
-        Job.delete_pending == False, Job.owner_id == (account.id if account else None)
+        Job.delete_pending == False,
+        unexpired(),
+        Job.owner_id == (account.id if account else None),
     )
     count_statement = select(func.count(col(Job.id))).where(
-        Job.delete_pending == False, Job.owner_id == (account.id if account else None)
+        Job.delete_pending == False,
+        unexpired(),
+        Job.owner_id == (account.id if account else None),
     )
     if job_status is not None:
         statement = statement.where(Job.status == job_status)
@@ -98,7 +103,7 @@ async def upload_job(
             )
         ).first()
         if existing:
-            if existing.delete_pending:
+            if existing.delete_pending or expired(existing):
                 raise HTTPException(
                     409, "The previous job with this idempotency key is being deleted."
                 )
@@ -123,7 +128,33 @@ async def upload_job(
             if size == 0:
                 raise HTTPException(400, "The PDF file is empty.")
 
+        await lock_account(session, account)
+        # Idempotent retries must still succeed when admission is full.
+        if account and idempotency_key:
+            existing = (
+                await session.exec(
+                    select(Job).where(
+                        Job.owner_id == account.id,
+                        Job.idempotency_key == idempotency_key,
+                    )
+                )
+            ).one_or_none()
+            if existing:
+                if existing.delete_pending or expired(existing):
+                    raise HTTPException(
+                        409,
+                        "The previous job is expiring or being deleted. Wait for cleanup before reusing its key.",
+                    )
+                return existing
+        await admit(
+            session, account, new_job=True, extra_bytes=size + settings.MAX_RESULT_BYTES
+        )
         job = Job(
+            input_bytes=size,
+            result_bytes=0,
+            result_reserved_bytes=settings.MAX_RESULT_BYTES,
+            result_limit_bytes=settings.MAX_RESULT_BYTES,
+            retention_days=settings.JOB_RETENTION_DAYS or None,
             owner_id=account.id if account else None,
             filename=filename,
             max_retries=max_retries,
@@ -189,6 +220,7 @@ async def download_result(
     if (
         not job
         or job.delete_pending
+        or expired(job)
         or job.owner_id != (account.id if account else None)
     ):
         raise HTTPException(404, "Job not found")
@@ -223,6 +255,7 @@ async def get_job_stats(
         select(Job.status, func.count(col(Job.id)))
         .where(
             Job.delete_pending == False,
+            unexpired(),
             Job.owner_id == (account.id if account else None),
         )
         .group_by(Job.status)
@@ -245,6 +278,7 @@ async def get_job_stats(
             Job.status == JobStatus.COMPLETED,
             Job.updated_at >= first_minute,
             Job.delete_pending == False,
+            unexpired(),
             Job.owner_id == (account.id if account else None),
         )
         .group_by(minute)
@@ -296,10 +330,19 @@ async def list_dlq_jobs(
     statement = select(Job).where(
         Job.status == JobStatus.FAILED,
         Job.delete_pending == False,
+        unexpired(),
         Job.owner_id == (account.id if account else None),
     )
     result = await session.exec(statement)
     return result.all()
+
+
+@router.get("/usage")
+async def get_usage(
+    session: AsyncSession = Depends(get_session),
+    account: Account = Depends(current_user),
+):
+    return await usage(session, account.id if account else None)
 
 
 @router.get("/{job_id}", response_model=JobRead)
@@ -312,6 +355,7 @@ async def get_job(
     if (
         not job
         or job.delete_pending
+        or expired(job)
         or job.owner_id != (account.id if account else None)
     ):
         raise HTTPException(status_code=404, detail="Job not found")
@@ -352,6 +396,7 @@ async def requeue_failed_job(
     session: AsyncSession = Depends(get_session),
     account: Account = Depends(current_user),
 ):
+    await lock_account(session, account)
     # Serialize requeue claims until the FAILED -> PENDING change is committed.
     job = (
         await session.exec(
@@ -363,6 +408,7 @@ async def requeue_failed_job(
     if (
         not job
         or job.delete_pending
+        or expired(job)
         or job.owner_id != (account.id if account else None)
     ):
         raise HTTPException(status_code=404, detail="Job not found")
@@ -373,6 +419,12 @@ async def requeue_failed_job(
             detail=f"Only FAILED jobs can be requeued. Current status: {job.status}",
         )
 
+    extra = max(job.result_limit_bytes, job.result_bytes or 0) - max(
+        job.result_reserved_bytes, job.result_bytes or 0
+    )
+    await admit(session, account, extra_bytes=max(0, extra))
+    job.result_reserved_bytes = max(job.result_reserved_bytes, job.result_limit_bytes)
+    job.expires_at = None
     job.dispatch_key = uuid4().hex
     job.dispatch_pending = True
     job.status = JobStatus.PENDING
@@ -396,7 +448,12 @@ async def job_progress_websocket(
     if account:
         async with async_session_maker() as authorization_session:
             owned = await authorization_session.get(Job, job_id)
-            if not owned or owned.delete_pending or owned.owner_id != account.id:
+            if (
+                not owned
+                or owned.delete_pending
+                or expired(owned)
+                or owned.owner_id != account.id
+            ):
                 await websocket.close(code=1008)
                 return
     await websocket.accept()
@@ -413,6 +470,7 @@ async def job_progress_websocket(
         if (
             not job
             or job.delete_pending
+            or expired(job)
             or job.owner_id != (account.id if account else None)
         ):
             await websocket.send_json({"error": f"Job {job_id} not found"})

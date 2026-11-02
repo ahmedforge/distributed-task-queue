@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 from sqlmodel import select
 
 from app.core.database import async_session_maker
@@ -52,3 +53,27 @@ async def cleanup_pending_deletions():
         ).all()
     for job_id in ids:
         await cleanup_job(job_id)
+
+
+async def expire_finished_jobs():
+    async with async_session_maker() as session:
+        jobs = (
+            await session.exec(
+                select(Job)
+                .where(
+                    Job.expires_at != None,
+                    Job.expires_at <= datetime.now(timezone.utc),
+                    Job.status.in_([JobStatus.COMPLETED, JobStatus.FAILED]),
+                    Job.delete_pending == False,
+                )
+                .order_by(Job.expires_at, Job.id)
+                .limit(100)
+                .with_for_update(skip_locked=True)
+            )
+        ).all()
+        for job in jobs:
+            job.delete_pending = True
+            job.dispatch_pending = False
+            session.add(job)
+        await session.commit()
+        return len(jobs)

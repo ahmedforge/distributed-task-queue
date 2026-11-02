@@ -1,6 +1,7 @@
 export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
 export interface JobRead {
+  expires_at?: string | null;
   id: number;
   filename: string;
   status: JobStatus;
@@ -11,6 +12,15 @@ export interface JobRead {
   error_message?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AccountUsage {
+  active_jobs: number;
+  retained_jobs: number;
+  storage_bytes: number;
+  reserved_bytes: number;
+  storage_accounted: boolean;
+  limits: { active_jobs: number; retained_jobs: number; storage_bytes: number; max_result_bytes: number; retention_days: number };
 }
 
 export interface JobListResponse {
@@ -59,6 +69,11 @@ export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {})
 const API_BASE = '/api/v1/jobs';
 
 export const apiClient = {
+  getUsage: async (): Promise<AccountUsage> => {
+    const response = await apiFetch(`${API_BASE}/usage`);
+    if (!response.ok) throw new Error('Unable to refresh account limits.');
+    return response.json();
+  },
   listJobs: async (page: number, status?: JobStatus): Promise<JobListResponse> => {
     const params = new URLSearchParams({ page: String(page), page_size: '20' });
     if (status) params.set('status', status);

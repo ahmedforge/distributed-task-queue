@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: str | None = None
     S3_SECRET_KEY: str | None = None
     STORAGE_DIR: str = "data/jobs"
+    ACCOUNT_MAX_ACTIVE_JOBS: int = Field(default=5, ge=1)
+    ACCOUNT_MAX_STORED_JOBS: int = Field(default=50, ge=1)
+    ACCOUNT_MAX_STORAGE_BYTES: int = Field(default=512 * 1024 * 1024, ge=1)
+    MAX_RESULT_BYTES: int = Field(default=100 * 1024 * 1024, ge=1)
+    JOB_RETENTION_DAYS: int = Field(default=7, ge=0, le=3650)
     MAX_UPLOAD_BYTES: int = 20 * 1024 * 1024
     MAX_PDF_PAGES: int = 50
 

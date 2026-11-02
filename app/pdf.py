@@ -32,19 +32,43 @@ async def run_poppler(*args: str) -> bytes:
     return stdout
 
 
-def write_archive(directory: Path, destination: Path) -> None:
-    with ZipFile(destination, "w", ZIP_DEFLATED) as archive:
-        for image in sorted(directory.glob("page-*.png")):
-            archive.write(image, arcname=image.name)
+class BoundedWriter:
+    def __init__(self, stream, limit):
+        self.stream, self.limit = stream, limit
+
+    def write(self, data):
+        if self.stream.tell() + len(data) > self.limit:
+            raise ValueError("Rendered ZIP exceeds the result size limit.")
+        return self.stream.write(data)
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
 
 
-async def render_pdf(job_id: int, on_progress) -> None:
+def write_archive(directory: Path, destination: Path, max_bytes: int) -> int:
+    with destination.open("w+b") as stream:
+        with ZipFile(BoundedWriter(stream, max_bytes), "w", ZIP_DEFLATED) as archive:
+            for image in sorted(directory.glob("page-*.png")):
+                archive.write(image, arcname=image.name)
+    return destination.stat().st_size
+
+
+async def render_pdf(
+    job_id: int, on_progress, *, max_result_bytes: int | None = None
+) -> int:
     # Scratch is private to this attempt; no shared worker filesystem is needed.
     with tempfile.TemporaryDirectory(prefix=f"dtq-{job_id}-") as scratch:
-        await _render_pdf(job_id, on_progress, Path(scratch))
+        return await _render_pdf(
+            job_id,
+            on_progress,
+            Path(scratch),
+            max_result_bytes or settings.MAX_RESULT_BYTES,
+        )
 
 
-async def _render_pdf(job_id: int, on_progress, directory: Path) -> None:
+async def _render_pdf(
+    job_id: int, on_progress, directory: Path, max_result_bytes: int
+) -> int:
     storage = get_storage()
     source = directory / "input.pdf"
     try:
@@ -82,5 +106,8 @@ async def _render_pdf(job_id: int, on_progress, directory: Path) -> None:
         )
         await on_progress(10 + int(80 * page / pages))
     archive = directory / "pages.zip"
-    await asyncio.to_thread(write_archive, directory, archive)
+    result_size = await asyncio.to_thread(
+        write_archive, directory, archive, max_result_bytes
+    )
     await asyncio.to_thread(storage.put, job_id, "pages.zip", archive)
+    return result_size

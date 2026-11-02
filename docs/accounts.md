@@ -11,7 +11,7 @@ Accounts are required for every job API and job WebSocket. Create an account at 
 - Sessions expire after seven days. Signing in replaces that browser's old login; signing out revokes one login; signing out all devices revokes every login for that account. Existing live sockets recheck login validity at most every 15 seconds. Expired login rows are pruned when a new login is issued.
 - Account/job responses use `Cache-Control: no-store`. Browser account changes clear job caches; other open tabs reload through BroadcastChannel. Tokens are not put in URLs or localStorage.
 - Mutation requests require `X-DistribuQueue: 1`; supplied Origin headers must match the browser-facing origin. There is no cross-origin CORS allowance. WebSockets also validate Origin. API clients without an Origin header still need the custom mutation header and session cookie.
-- Registration/login share atomic Redis limits: 10 attempts per username and 100 per client IP in a 15-minute window. Both successful and failed attempts count. If Redis is unavailable, account creation/login returns 503. Existing sessions and ordinary REST job reads can still authenticate through PostgreSQL. These are authentication limits, not PDF upload quotas or general traffic protection.
+- Registration/login share atomic Redis limits: 10 attempts per username and 100 per client IP in a 15-minute window. Both successful and failed attempts count. If Redis is unavailable, account creation/login returns 503. Existing sessions and ordinary REST job reads can still authenticate through PostgreSQL. These authentication attempt limits are separate from [per-account PDF admission budgets](resource-limits.md), and do not provide general traffic protection.
 
 ## Upgrade and existing jobs
 
@@ -39,7 +39,7 @@ Downgrading removes accounts and owner associations. If multiple owners have reu
 
 Local Compose/Vite uses HTTP with `AUTH_COOKIE_SECURE=false`. Before remote use, configure HTTPS, set `AUTH_COOKIE_SECURE=true` and `AUTH_ORIGIN` to the exact external origin (for example `https://queue.example.com`, no trailing slash). Compose forwards both settings; other launchers must pass them to the API environment. Browser and API paths must share the same origin. The development Vite proxy preserves Host for this check.
 
-Configure forwarded headers only for a trusted reverse proxy and block direct backend access, so rate limits use the real client IP. Do not trust arbitrary public X-Forwarded-For input. A proxy which hides all clients behind one address shares the 100-attempt limit across those clients. This release does not configure cloud TLS, public upload quotas, storage retention, backups, or Redis-data-loss recovery.
+Configure forwarded headers only for a trusted reverse proxy and block direct backend access, so rate limits use the real client IP. Do not trust arbitrary public X-Forwarded-For input. A proxy which hides all clients behind one address shares the 100-attempt limit across those clients. Per-account admission budgets and new-job expiry are documented in [resource limits](resource-limits.md). This release does not configure cloud TLS, backups, global traffic protection, or Redis-data-loss recovery.
 
 ## API clients
 

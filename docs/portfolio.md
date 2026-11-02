@@ -64,7 +64,7 @@ Only completed and failed jobs can be deleted. Deletion and requeue use the same
 - One finite batch of simple generated PDFs is not a sustained service-capacity benchmark.
 - The crash check retained PostgreSQL, Redis, and shared storage; it did not test a full-host failure or Redis data loss.
 - Default local storage is limited to one shared Docker host. The optional MinIO backend lets workers use independent filesystems; the verified Kubernetes demo still runs on one physical host.
-- The app is a local portfolio demo, with account authentication and job ownership. Public upload quotas, age-based retention, and a hosted rollout remain outside its demonstrated scope.
+- The app is a local portfolio demo, with account authentication and job ownership. Per-account resource budgets and new-job expiry are implemented; a hosted rollout and global traffic protection remain outside its demonstrated scope.
 - Shared object storage, two-worker crash recovery, and local Kubernetes/KEDA scaling are implemented in v2. Terraform now provisions local kind only; cloud rollout and multi-node availability remain outside scope. No AWS deployment is claimed.
 
 ## v1 completion record

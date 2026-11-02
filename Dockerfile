@@ -22,6 +22,7 @@ COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 COPY scripts/assign_legacy_jobs.py /app/scripts/assign_legacy_jobs.py
+COPY scripts/measure_job_storage.py /app/scripts/measure_job_storage.py
 
 # Set permissions and switch user
 RUN mkdir -p /app/data/jobs && chown -R appuser:appgroup /app

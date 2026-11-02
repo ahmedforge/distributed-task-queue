@@ -1,3 +1,4 @@
+import { AccountUsage } from '../components/AccountUsage';
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -61,6 +62,7 @@ export const JobListPage: React.FC<{ failedOnly?: boolean }> = ({ failedOnly = f
       ].map(([label, value]) => <div key={label} className="stat"><p className="stat-label">{label}</p><p className="stat-value">{value ?? '—'}</p></div>)}
     </div>
     {statsError && <p role="alert" className="notice">Unable to load job counts.</p>}
+    <AccountUsage />
     <div className="job-toolbar">
       <span className="text-xs text-muted">{data ? `${data.total} ${data.total === 1 ? 'job' : 'jobs'}` : 'Loading…'} · newest first</span>
       {!failedOnly && <label>Status<select value={status ?? ''} onChange={(event) => {

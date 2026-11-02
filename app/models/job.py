@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from sqlmodel import DateTime, Field, SQLModel
-from sqlalchemy import Index, UniqueConstraint, text
+from sqlalchemy import Index, UniqueConstraint, text, BigInteger
 
 
 class JobStatus(str, Enum):
@@ -26,6 +26,14 @@ class Job(SQLModel, table=True):
     )
     owner_id: Optional[int] = Field(default=None, foreign_key="account.id", index=True)
     id: Optional[int] = Field(default=None, primary_key=True)
+    input_bytes: Optional[int] = Field(default=None, sa_type=BigInteger)
+    result_bytes: Optional[int] = Field(default=None, sa_type=BigInteger)
+    result_reserved_bytes: int = Field(default=0, sa_type=BigInteger)
+    result_limit_bytes: int = Field(default=100 * 1024 * 1024, sa_type=BigInteger)
+    retention_days: Optional[int] = Field(default=None)
+    expires_at: Optional[datetime] = Field(
+        default=None, sa_type=DateTime(timezone=True), index=True
+    )
     filename: str
     status: JobStatus = Field(default=JobStatus.PENDING)
 
@@ -60,6 +68,7 @@ class JobCreate(SQLModel):
 
 
 class JobRead(SQLModel):
+    expires_at: Optional[datetime] = None
     id: int
     filename: str
     status: JobStatus

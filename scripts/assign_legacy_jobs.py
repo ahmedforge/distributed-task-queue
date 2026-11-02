@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.database import async_session_maker, engine
 from app.models.account import Account
 from app.models.job import Job
+from app.limits import lock_account
 
 
 async def assign(username, apply=False):
@@ -23,6 +24,7 @@ async def assign(username, apply=False):
             raise ValueError(
                 "Account not found. Create the account through the app first."
             )
+        await lock_account(session, account)
         jobs = (
             await session.exec(
                 select(Job).where(Job.owner_id == None).with_for_update()

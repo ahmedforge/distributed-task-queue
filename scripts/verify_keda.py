@@ -132,6 +132,24 @@ async def verify(args):
             response = await client.get(url + "/")
             response.raise_for_status()
             assert "<html" in response.text.lower()
+            usage_response = await client.get(url + "/api/v1/jobs/usage")
+            usage_response.raise_for_status()
+            usage = usage_response.json()
+            limits = usage["limits"]
+            report["admission_limits"] = limits
+            required_space = args.jobs * (
+                len(pdf_bytes(20)) + limits["max_result_bytes"]
+            )
+            if (
+                limits["active_jobs"] < args.jobs
+                or limits["retained_jobs"] - usage["retained_jobs"] < args.jobs
+                or not usage["storage_accounted"]
+                or usage["storage_bytes"] + usage["reserved_bytes"] + required_space
+                > limits["storage_bytes"]
+            ):
+                raise RuntimeError(
+                    "The deployed API budget cannot admit this backlog. Configure the disposable demo's account limits as documented in docs/kubernetes.md before running verification."
+                )
             prefix = uuid4().hex
             semaphore = asyncio.Semaphore(4)
 

@@ -81,10 +81,13 @@ manifest does not add exactly-once execution or Redis-data-loss recovery.
 Start from a fresh, idle demo with one ready worker:
 
 ```bash
+# Only for this disposable workload demo: allow the 16-job verification batch.
+kubectl -n dtq set env deployment/api ACCOUNT_MAX_ACTIVE_JOBS=32 ACCOUNT_MAX_STORED_JOBS=100 ACCOUNT_MAX_STORAGE_BYTES=4294967296
+kubectl -n dtq rollout status deployment/api
 poetry run python scripts/verify_keda.py
 ```
 
-The script uses a temporary localhost frontend port-forward, uploads synthetic
+The script checks account budgets before uploading; ordinary defaults are intentionally too small for this backlog experiment. The explicit overrides above apply only to the disposable local demo, not a hosted app. The script uses a temporary localhost frontend port-forward, uploads synthetic
 20-page PDFs, records real queue lengths and desired/ready/pod counts, checks
 that at least two workers become ready, verifies each output ZIP and PNG page,
 and waits for the deployment to return to one worker with no terminating pods.

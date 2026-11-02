@@ -134,3 +134,44 @@ async def test_upload_storage_failure_rolls_back_job(
                 select(Job).where(Job.idempotency_key == "storage-failure")
             )
         ).first() is None
+
+
+@pytest.mark.asyncio
+async def test_s3_measurement_and_expiry_preserve_quota_until_cleanup(
+    client, monkeypatch, pdf_bytes, object_storage
+):
+    from datetime import datetime, timedelta, timezone
+    from app.deletion import expire_finished_jobs
+    from app.limits import usage
+    from scripts.measure_job_storage import measure_finished_jobs
+
+    response = await client.post(
+        "/api/v1/jobs/upload",
+        files={"file": ("expires.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert response.status_code == 201
+    job_id = response.json()["id"]
+    await worker_settings["functions"][0]({}, payload={"id": job_id})
+    assert object_storage.size(job_id, "input.pdf") == len(pdf_bytes)
+    assert object_storage.size(job_id, "pages.zip") > 0
+    assert object_storage.size(999999, "pages.zip") == 0
+    async with async_session_maker() as session:
+        job = await session.get(Job, job_id)
+        job.input_bytes = job.result_bytes = None
+        await session.commit()
+    assert await measure_finished_jobs(apply=True) == 1
+    async with async_session_maker() as session:
+        recorded = await usage(session, None)
+        assert recorded["storage_accounted"] and recorded["reserved_bytes"] == 0
+        job = await session.get(Job, job_id)
+        job.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        await session.commit()
+    assert await expire_finished_jobs() == 1
+    await cleanup_pending_deletions()
+    assert (
+        object_storage.size(job_id, "input.pdf")
+        == object_storage.size(job_id, "pages.zip")
+        == 0
+    )
+    async with async_session_maker() as session:
+        assert (await usage(session, None))["storage_bytes"] == 0

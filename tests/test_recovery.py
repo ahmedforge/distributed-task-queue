@@ -28,7 +28,7 @@ async def test_real_worker_timeout_updates_database_and_exhausts_budget(
         await session.commit()
         job_id = job.id
 
-    async def hangs(*args):
+    async def hangs(*args, **kwargs):
         await asyncio.Event().wait()
 
     monkeypatch.setattr("app.tasks.render_pdf", hangs)
@@ -186,7 +186,7 @@ async def test_graceful_worker_cancellation_returns_job_to_pending(monkeypatch):
         job_id = job.id
     started = asyncio.Event()
 
-    async def hangs(*args):
+    async def hangs(*args, **kwargs):
         started.set()
         await asyncio.Event().wait()
 

@@ -18,6 +18,7 @@ export const JobDetailPage: React.FC = () => {
     onSuccess: (updated) => {
       queryClient.setQueryData(['job', jobId], updated);
       queryClient.invalidateQueries({ queryKey: ['jobStats'] });
+      queryClient.invalidateQueries({ queryKey: ['accountUsage'] });
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
     },
   });
@@ -26,6 +27,7 @@ export const JobDetailPage: React.FC = () => {
     mutationFn: () => apiClient.deleteJob(jobId),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['jobStats'] });
+      queryClient.invalidateQueries({ queryKey: ['accountUsage'] });
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       queryClient.removeQueries({ queryKey: ['job', jobId] });
       toast.success(result.cleanup_pending ? 'Job removed. File cleanup will retry automatically.' : 'Job and saved files deleted.');
@@ -48,6 +50,7 @@ export const JobDetailPage: React.FC = () => {
       <progress max={100} value={job.progress} aria-label="Rendering progress" />
       <dl className="detail-meta"><div><dt>Created</dt><dd><time dateTime={job.created_at}>{new Date(job.created_at).toLocaleString()}</time></dd></div><div><dt>Failed attempts</dt><dd>{job.retry_count} / {job.max_retries}</dd></div><div><dt>Last updated</dt><dd><time dateTime={job.updated_at}>{new Date(job.updated_at).toLocaleTimeString()}</time></dd></div></dl>
       {job.status !== 'COMPLETED' && job.status !== 'FAILED' && <p role="status" className="field-note">{connection === 'live' ? 'Receiving live progress updates.' : 'Reconnecting. Status refreshes automatically.'}</p>}
+      {job.expires_at && <p className="field-note">Job and files expire <time dateTime={job.expires_at}>{new Date(job.expires_at).toLocaleString()}</time>. {job.status === 'COMPLETED' ? 'Download your ZIP before then.' : 'Retry before then to keep working on this job.'}</p>}
       {job.status === 'COMPLETED' && <p className="field-note">All pages have been rendered. Your ZIP is ready to download.</p>}
       {error && <p role="alert" className="notice">Unable to refresh status. Showing the last known state.</p>}
       {job.error_message && <p role="alert" className="notice">{job.error_message}</p>}

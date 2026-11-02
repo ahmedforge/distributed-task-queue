@@ -179,3 +179,7 @@ progress::-moz-progress-bar { background: var(--primary); }
   .form-footer { align-items: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.usage-summary { padding: 0 0 20px; color: var(--muted); font-size: 12px; }
+.usage-summary > p:first-child { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 0; }
+.usage-summary strong { font-weight: 500; color: var(--fg); margin-left: 5px; font-variant-numeric: tabular-nums; }

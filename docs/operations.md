@@ -146,7 +146,7 @@ Missing Redis records are left unchanged rather than treated as proof of failure
 
 Completed and failed job pages offer **Delete job and files**, with confirmation. Deletion removes the original PDF, rendered ZIP, leftover scratch files, and job metadata. Pending/processing jobs cannot be deleted (HTTP 409). Requeue and deletion use the same database row lock so a claimed requeue cannot lose its input to a concurrent delete.
 
-The API first commits a deletion marker, hides the job from lists/status/downloads, then removes its job directory and database row. Storage failures return HTTP 202; the background loop retries cleanup, including after restart. Crashes after file removal leave the marker available for another pass. Permanent storage permission failures need correction before cleanup can succeed. No age-based retention policy is enabled.
+The API first commits a deletion marker, hides the job from lists/status/downloads, then removes its job directory and database row. Storage failures return HTTP 202; the background loop retries cleanup, including after restart. Crashes after file removal leave the marker available for another pass. Permanent storage permission failures need correction before cleanup can succeed. New jobs use a configurable retention policy; existing jobs retain their files until explicitly deleted. See [resource limits and expiry](resource-limits.md).
 
 Deleting a job also removes its idempotency-key claim once cleanup finishes; the key may then be reused. PostgreSQL dashboard counts represent retained jobs. Historical Prometheus measurements remain; SAQ's task record expires through its normal retention. The frontend clears that job's cached status and returns to the dashboard. Theme preferences are unaffected.
 
@@ -217,13 +217,13 @@ Backend tests use real PDFs, Poppler, PostgreSQL, Redis, and SAQ, including uplo
 
 The migration checker creates a new database whose name ends in `_migrations`, tests upgrade → full rollback → upgrade, and verifies the current Job model can insert into the migrated schema. It refuses existing databases. Pytest uses a separate database because its fixtures create/drop tables. These checks do not publish images or deploy to a cloud provider.
 
-Remaining work includes age-based storage retention, recovery after Redis data loss or expired queue records. Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included in Compose. The optional local Kubernetes/KEDA setup uses MinIO; it does not include the monitoring stack or establish multi-node availability.
+Remaining work includes recovery after Redis data loss or expired queue records. Account budgets and new-job expiry are documented in [resource limits](resource-limits.md). Shared disk storage supports multiple workers on one Docker host; workers on separate machines need shared/object storage. Prometheus/Grafana monitoring is included in Compose. The optional local Kubernetes/KEDA setup uses MinIO; it does not include the monitoring stack or establish multi-node availability.
 
 ## v1 finish line
 
 This release is a local portfolio demo. The recorded load/crash check and the demo/screenshots/resume material are complete. The v1 feature scope is complete; v2 adds shared object storage, independent-worker recovery verification, and a local Kubernetes/KEDA demo. The core upload, queue, render, download, monitoring, and deletion flows must keep passing CI. Simultaneous uploads using one idempotency key must return the same job and create only one input file and queue task.
 
-Cloud deployment, upload quotas, password recovery, and age-based retention remain outside the bounded local v2 scope. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
+Cloud deployment and password recovery remain outside the demonstrated local scope. Per-account resource budgets and new-job expiry extend the earlier local v2 release. The current app is intended for local demonstration, not an unrestricted public upload service. Performance claims must name the tested workload and environment. The measured results above apply only to their documented conditions.
 
 ## Deployment status
 
@@ -296,8 +296,7 @@ The published `v2.0.0` images were deployed on a fresh kind node with Terraform;
 - Account authentication and job ownership are implemented; see [account behavior and limits](accounts.md). Password recovery is not implemented.
 - No automatic deployment. Version publishing requires an owner-pushed stable tag.
 - Trivy blocks fixable HIGH/CRITICAL frontend findings. The `v2.0.0` release scans found **3 HIGH each in API and worker** (Starlette), **0 in frontend**, and **62 HIGH / 5 CRITICAL in MinIO** (Go toolchain/dependencies). API/worker/MinIO remain report-only; these include project-controllable dependency issues, and the images are not claimed vulnerability-free. Counts are package vulnerability occurrences at scan time. [Recorded findings and scan policy](infrastructure-verification.md#published-release-verification--october-21-2026).
-- No age-based retention or public-service rate limiting. Upload size/page limits
-  exist, but they are not sufficient protection for an unrestricted public demo.
+- Per-account budgets and new-job expiry are implemented. Global traffic protection and infrastructure limits are still required before an unrestricted public demo; see [limits](resource-limits.md).
 - Redis data loss and expired queue records remain recovery limits; execution is
   not exactly once. Kubernetes uses one Docker node with local PVCs, and destroy
   removes that demo data.
